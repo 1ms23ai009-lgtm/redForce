@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REDFORGE — Live Attack Dashboard</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --red: #ff4040;
+    --red-dim: #cc2020;
+    --green: #40ff70;
+    --yellow: #ffcc40;
+    --cyan: #40ccff;
+    --text: #cccccc;
+    --text-dim: #777777;
+    --border: #2a2a3a;
+    --font: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ───────────────────────────────────────── */
+  header {
+    background: linear-gradient(135deg, #0d0d14, #151520);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--red);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+  }
+  .logo h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--red);
+    letter-spacing: 3px;
+  }
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    display: inline-block;
+  }
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.running { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ── Buttons ──────────────────────────────────────── */
+  .btn {
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--bg3);
+    color: var(--text);
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--red); color: #fff; }
+  .btn-primary {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--red-dim); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Layout ───────────────────────────────────────── */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 16px;
+    padding: 16px 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: var(--bg3);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .panel-body {
+    padding: 16px;
+  }
+
+  /* ── Metrics Row ──────────────────────────────────── */
+  .metrics {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+  }
+  .metric-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .metric-value.red { color: var(--red); }
+  .metric-value.green { color: var(--green); }
+  .metric-value.yellow { color: var(--yellow); }
+  .metric-value.cyan { color: var(--cyan); }
+  .metric-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── Attack Feed ──────────────────────────────────── */
+  .feed {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+  }
+  .feed .panel-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0;
+  }
+  .feed-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .feed-item:hover { background: rgba(255,64,64,0.03); }
+  .feed-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .feed-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-exploited { background: rgba(255,64,64,0.15); color: var(--red); border: 1px solid rgba(255,64,64,0.3); }
+  .badge-blocked { background: rgba(64,255,112,0.1); color: var(--green); border: 1px solid rgba(64,255,112,0.2); }
+  .badge-running { background: rgba(255,204,64,0.1); color: var(--yellow); border: 1px solid rgba(255,204,64,0.2); }
+  .badge-critical { background: rgba(255,64,64,0.2); color: #ff6060; }
+  .badge-high { background: rgba(255,140,64,0.15); color: #ff9040; }
+  .badge-medium { background: rgba(255,204,64,0.1); color: var(--yellow); }
+  .feed-name { font-weight: 600; color: #ddd; }
+  .feed-detail { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .feed-prompt {
+    background: var(--bg);
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--cyan);
+    border-left: 2px solid var(--cyan);
+    max-height: 80px;
+    overflow-y: auto;
+  }
+  .feed-response {
+    background: var(--bg);
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border-left: 2px solid var(--red);
+    max-height: 80px;
+    overflow-y: auto;
+  }
+
+  /* ── Right Panel (Results + Graph) ────────────────── */
+  .right-col {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 600px;
+  }
+
+  /* ── Scenario Table ───────────────────────────────── */
+  .scenario-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .scenario-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--text-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .scenario-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(42,42,58,0.5);
+  }
+  .scenario-table tr.exploited td:first-child { border-left: 3px solid var(--red); }
+  .scenario-table tr.blocked td:first-child { border-left: 3px solid var(--green); }
+  .scenario-table tr.pending td:first-child { border-left: 3px solid var(--border); }
+  .sev-critical { color: #ff4040; font-weight: 700; }
+  .sev-high { color: #ff9040; font-weight: 600; }
+  .sev-medium { color: var(--yellow); }
+  .sev-none { color: var(--text-dim); }
+
+  /* ── OWASP Chart ──────────────────────────────────── */
+  .owasp-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .owasp-label {
+    width: 120px;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .owasp-track {
+    flex: 1;
+    height: 18px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .owasp-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+    min-width: 0;
+  }
+  .owasp-fill.vuln { background: linear-gradient(90deg, var(--red-dim), var(--red)); }
+  .owasp-fill.safe { background: var(--bg3); }
+
+  /* ── Progress Bar ─────────────────────────────────── */
+  .progress-container {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--red);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+  .progress-text {
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 200px;
+  }
+
+  /* ── Phase Banner ─────────────────────────────────── */
+  .phase-banner {
+    grid-column: 1 / -1;
+    background: linear-gradient(90deg, rgba(255,64,64,0.05), transparent);
+    border: 1px solid rgba(255,64,64,0.15);
+    border-radius: 8px;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    display: none;
+  }
+  .phase-banner.visible { display: flex; }
+  .phase-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: pulse 1s infinite;
+  }
+
+  /* ── Scrollbar ────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+  /* ── Responsive ───────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .dashboard { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(3, 1fr); }
+    .feed, .right-col { grid-column: 1; grid-row: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">RF</div>
+    <div>
+      <h1>REDFORGE</h1>
+      <div class="logo-sub">Autonomous AI Red-Teaming System</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText" style="font-size:11px;color:var(--text-dim)">Connecting...</span>
+    <button class="btn btn-primary" id="btnAttack" disabled>Launch Attack</button>
+    <button class="btn" id="btnReset">Reset</button>
+  </div>
+</header>
+
+<!-- ── Dashboard Grid ──────────────────────────────── -->
+<div class="dashboard">
+
+  <!-- Phase Banner -->
+  <div class="phase-banner" id="phaseBanner">
+    <div class="phase-indicator"></div>
+    <span id="phaseText">Initializing...</span>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="progress-container" id="progressContainer" style="display:none;">
+    <span style="font-size:11px;color:var(--text-dim);min-width:80px;" id="progressLabel">Progress</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-text" id="progressText">0 / 8 scenarios</span>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-value red" id="metricExploits">—</div>
+      <div class="metric-label">Exploits Found</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" id="metricTotal">—</div>
+      <div class="metric-label">Scenarios</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value yellow" id="metricRisk">—</div>
+      <div class="metric-label">Risk Score</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value cyan" id="metricCoverage">—</div>
+      <div class="metric-label">OWASP Coverage</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value green" id="metricControl">—</div>
+      <div class="metric-label">Control Test</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" id="metricNash">—</div>
+      <div class="metric-label">Nash Value</div>
+    </div>
+  </div>
+
+  <!-- Attack Feed (left) -->
+  <div class="panel feed">
+    <div class="panel-header">
+      <span>Live Attack Feed</span>
+      <span id="feedCount" style="color:var(--red)">0 events</span>
+    </div>
+    <div class="panel-body" id="feedBody">
+      <div style="padding:40px;text-align:center;color:var(--text-dim);">
+        Click <strong style="color:var(--red);">Launch Attack</strong> to start the real-time demo
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column -->
+  <div class="right-col">
+    <!-- Scenario Results Table -->
+    <div class="panel" style="flex:1;overflow-y:auto;">
+      <div class="panel-header">
+        <span>Scenario Results</span>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table class="scenario-table">
+          <thead>
+            <tr><th>Scenario</th><th>Status</th><th>Severity</th><th>Score</th></tr>
+          </thead>
+          <tbody id="scenarioBody">
+            <tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">Waiting for attack...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OWASP Coverage -->
+    <div class="panel" style="flex:0 0 auto;">
+      <div class="panel-header">
+        <span>OWASP LLM Top 10 Coverage</span>
+      </div>
+      <div class="panel-body" id="owaspBody">
+        <div style="text-align:center;color:var(--text-dim);padding:16px;">Waiting for results...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── JavaScript ──────────────────────────────────── -->
+<script>
+const WS_URL = `ws://${location.host}/ws`;
+let ws = null;
+let eventCount = 0;
+let scenarioResults = {};
+let completedCount = 0;
+let totalScenarios = 8;
+
+// OWASP mapping
+const OWASP_LABELS = {
+  "LLM01_prompt_injection": "LLM01 Injection",
+  "LLM02_insecure_output": "LLM02 Output",
+  "LLM03_training_data_poisoning": "LLM03 Poisoning",
+  "LLM04_denial_of_service": "LLM04 DoS",
+  "LLM05_supply_chain": "LLM05 Supply Chain",
+  "LLM06_sensitive_info": "LLM06 Sensitive Info",
+  "LLM07_insecure_plugin": "LLM07 Plugin",
+  "LLM08_excessive_agency": "LLM08 Agency",
+  "LLM09_overreliance": "LLM09 Overreliance",
+  "LLM10_model_theft": "LLM10 Model Theft",
+};
+let owaspHits = {};
+
+// ── Connect WebSocket ────────────────────────────────
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('statusDot').className = 'status-dot connected';
+    document.getElementById('statusText').textContent = 'Connected';
+    document.getElementById('btnAttack').disabled = false;
+  };
+  ws.onclose = () => {
+    document.getElementById('statusDot').className = 'status-dot';
+    document.getElementById('statusText').textContent = 'Disconnected';
+    document.getElementById('btnAttack').disabled = true;
+    setTimeout(connect, 2000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleEvent(msg);
+  };
+}
+
+// ── Event Handler ────────────────────────────────────
+function handleEvent(msg) {
+  const { type, data } = msg;
+
+  switch (type) {
+    case 'phase':
+      showPhase(data.message);
+      break;
+
+    case 'attack_start':
+      totalScenarios = data.total;
+      showProgress(true);
+      addFeedItem('start', data);
+      addScenarioRow(data);
+      document.getElementById('metricTotal').textContent = data.total;
+      break;
+
+    case 'attack_turn':
+      addFeedTurn(data);
+      break;
+
+    case 'attack_result':
+      completedCount++;
+      updateProgress(completedCount, totalScenarios);
+      updateScenarioRow(data);
+      if (data.success) {
+        trackOwasp(data.owasp, data.severity);
+      }
+      addFeedResult(data);
+      break;
+
+    case 'summary':
+      showSummary(data);
+      hidePhase();
+      break;
+
+    case 'state':
+      if (data.running) {
+        document.getElementById('statusDot').className = 'status-dot running';
+        document.getElementById('btnAttack').disabled = true;
+      }
+      break;
+
+    case 'reset':
+      resetDashboard();
+      break;
+  }
+}
+
+// ── Phase Banner ─────────────────────────────────────
+function showPhase(text) {
+  const banner = document.getElementById('phaseBanner');
+  document.getElementById('phaseText').textContent = text;
+  banner.classList.add('visible');
+  document.getElementById('statusDot').className = 'status-dot running';
+  document.getElementById('btnAttack').disabled = true;
+}
+function hidePhase() {
+  document.getElementById('phaseBanner').classList.remove('visible');
+  document.getElementById('statusDot').className = 'status-dot connected';
+  document.getElementById('btnAttack').disabled = false;
+}
+
+// ── Progress ─────────────────────────────────────────
+function showProgress(show) {
+  document.getElementById('progressContainer').style.display = show ? 'flex' : 'none';
+}
+function updateProgress(done, total) {
+  const pct = (done / total) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${done} / ${total} scenarios`;
+}
+
+// ── Feed Items ───────────────────────────────────────
+function addFeedItem(kind, data) {
+  const body = document.getElementById('feedBody');
+  if (eventCount === 0) body.innerHTML = '';
+  eventCount++;
+  document.getElementById('feedCount').textContent = eventCount + ' events';
+
+  const div = document.createElement('div');
+  div.className = 'feed-item';
+  div.id = `feed-${data.index}`;
+  div.innerHTML = `
+    <div class="feed-meta">
+      <span class="feed-badge badge-running">${data.index + 1}/${data.total}</span>
+      <span class="feed-name">${esc(data.name)}</span>
+    </div>
+    <div class="feed-detail">${esc(data.category)} &middot; ${esc(data.owasp)} &middot; ${data.num_prompts} turn(s)</div>
+  `;
+  body.prepend(div);
+}
+
+function addFeedTurn(data) {
+  eventCount++;
+  document.getElementById('feedCount').textContent = eventCount + ' events';
+
+  const container = document.getElementById(`feed-${data.index}`);
+  if (!container) return;
+
+  const turnDiv = document.createElement('div');
+  turnDiv.innerHTML = `
+    <div class="feed-prompt">&gt; ${esc(data.prompt)}</div>
+    <div class="feed-response">${esc(data.response)}</div>
+  `;
+  container.appendChild(turnDiv);
+}
+
+function addFeedResult(data) {
+  const container = document.getElementById(`feed-${data.index}`);
+  if (!container) return;
+
+  // Update badge
+  const badge = container.querySelector('.feed-badge');
+  if (data.is_control) {
+    badge.className = 'feed-badge ' + (data.control_passed ? 'badge-blocked' : 'badge-exploited');
+    badge.textContent = data.control_passed ? 'BLOCKED OK' : 'BYPASSED!';
+  } else {
+    badge.className = 'feed-badge ' + (data.success ? 'badge-exploited' : 'badge-blocked');
+    badge.textContent = data.verdict;
+  }
+}
+
+// ── Scenario Table ───────────────────────────────────
+function addScenarioRow(data) {
+  const tbody = document.getElementById('scenarioBody');
+  if (Object.keys(scenarioResults).length === 0) tbody.innerHTML = '';
+
+  scenarioResults[data.index] = data;
+  const tr = document.createElement('tr');
+  tr.className = 'pending';
+  tr.id = `scenario-row-${data.index}`;
+  tr.innerHTML = `
+    <td>${esc(data.name)}</td>
+    <td><span class="feed-badge badge-running">RUNNING</span></td>
+    <td>—</td>
+    <td>—</td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function updateScenarioRow(data) {
+  const tr = document.getElementById(`scenario-row-${data.index}`);
+  if (!tr) return;
+
+  let statusBadge, statusText, sevClass;
+  if (data.is_control) {
+    tr.className = data.control_passed ? 'blocked' : 'exploited';
+    statusBadge = data.control_passed ? 'badge-blocked' : 'badge-exploited';
+    statusText = data.control_passed ? 'BLOCKED OK' : 'BYPASSED';
+    sevClass = 'sev-none';
+  } else {
+    tr.className = data.success ? 'exploited' : 'blocked';
+    statusBadge = data.success ? 'badge-exploited' : 'badge-blocked';
+    statusText = data.verdict;
+    sevClass = data.success ? `sev-${data.severity}` : 'sev-none';
+  }
+
+  tr.innerHTML = `
+    <td>${esc(data.name)}</td>
+    <td><span class="feed-badge ${statusBadge}">${statusText}</span></td>
+    <td class="${sevClass}">${data.success ? data.severity.toUpperCase() : '—'}</td>
+    <td>${(data.score * 100).toFixed(0)}%</td>
+  `;
+}
+
+// ── OWASP Coverage ───────────────────────────────────
+function trackOwasp(owasp, severity) {
+  owaspHits[owasp] = severity;
+  renderOwasp();
+}
+
+function renderOwasp() {
+  const body = document.getElementById('owaspBody');
+  body.innerHTML = '';
+  for (const [key, label] of Object.entries(OWASP_LABELS)) {
+    const hit = owaspHits[key];
+    const bar = document.createElement('div');
+    bar.className = 'owasp-bar';
+    const pct = hit ? 100 : 0;
+    const cls = hit ? 'vuln' : 'safe';
+    bar.innerHTML = `
+      <span class="owasp-label">${label}</span>
+      <div class="owasp-track">
+        <div class="owasp-fill ${cls}" style="width:${pct}%"></div>
+      </div>
+    `;
+    body.appendChild(bar);
+  }
+}
+
+// ── Summary ──────────────────────────────────────────
+function showSummary(data) {
+  document.getElementById('metricExploits').textContent = data.exploits_found;
+  document.getElementById('metricTotal').textContent = data.total_scenarios;
+  document.getElementById('metricRisk').textContent = data.risk_score + '/10';
+  document.getElementById('metricCoverage').textContent = data.coverage + '%';
+  document.getElementById('metricControl').textContent = data.control_passed ? 'PASS' : 'FAIL';
+  document.getElementById('metricNash').textContent = data.nash_value;
+  showProgress(false);
+}
+
+// ── Reset ────────────────────────────────────────────
+function resetDashboard() {
+  eventCount = 0;
+  completedCount = 0;
+  scenarioResults = {};
+  owaspHits = {};
+  document.getElementById('feedBody').innerHTML =
+    '<div style="padding:40px;text-align:center;color:var(--text-dim);">Click <strong style="color:var(--red);">Launch Attack</strong> to start the real-time demo</div>';
+  document.getElementById('feedCount').textContent = '0 events';
+  document.getElementById('scenarioBody').innerHTML =
+    '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">Waiting for attack...</td></tr>';
+  document.getElementById('owaspBody').innerHTML =
+    '<div style="text-align:center;color:var(--text-dim);padding:16px;">Waiting for results...</div>';
+  ['metricExploits','metricTotal','metricRisk','metricCoverage','metricControl','metricNash'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  showProgress(false);
+  hidePhase();
+}
+
+// ── Utility ──────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── Init ─────────────────────────────────────────────
+document.getElementById('btnAttack').addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ command: 'start_attack' }));
+  }
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ command: 'reset' }));
+  }
+});
+
+connect();
+renderOwasp();
+</script>
+
+</body>
+</html>

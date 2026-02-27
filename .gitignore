@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code
+.claude/
+
+# Cache
+redforge/benchmarks/.cache/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Reports (generated, large)
+reports/
