@@ -24,10 +24,17 @@ class JudgeEnsemble:
         judge_api_key: Optional[str] = None,
         classifier_model: str = "facebook/bart-large-mnli",
         escalation_db_path: str = "data/escalations.db",
+        provider: str = "anthropic",
+        vertex_project: Optional[str] = None,
+        vertex_location: str = "us-central1",
     ):
         self._classifier = SafetyClassifier(model_name=classifier_model)
         self._llm_judge = LLMJudge(
-            model_name=judge_model, api_key=judge_api_key
+            model_name=judge_model,
+            api_key=judge_api_key,
+            provider=provider,
+            vertex_project=vertex_project,
+            vertex_location=vertex_location,
         )
         self._escalation = EscalationQueue(db_path=escalation_db_path)
 

@@ -226,35 +226,63 @@ def run_harmbench(
     attacker_model: str | None = None,
     key_split: tuple[int, int] | None = None,
     output_dir: str = "reports",
+    provider: str = "groq",
+    vertex_project: str | None = None,
+    vertex_location: str = "us-central1",
 ) -> dict:
-    """Run HarmBench evaluation using Groq.
+    """Run HarmBench evaluation.
 
     Args:
         groq_keys: List of Groq API keys. If None, loads from env.
         subset_size: Number of behaviors to test.
         max_pair_iterations: Max PAIR iterations per behavior.
-        target_model: Groq model to attack.
-        attacker_model: Groq model for attack generation.
+        target_model: Model to attack.
+        attacker_model: Model for attack generation.
         key_split: Tuple of (redforge_keys, target_keys) count.
         output_dir: Directory for report output.
+        provider: LLM provider ("groq" or "vertex").
+        vertex_project: GCP project ID (for Vertex AI).
+        vertex_location: GCP region (for Vertex AI).
 
     Returns:
         Summary dict with ASR, cost, etc.
     """
-    # Load keys
-    if groq_keys is None:
-        groq_keys = load_groq_keys_from_env()
-    if not groq_keys:
-        logger.error("No Groq API keys found. Set GROQ_API_KEYS or GROQ_API_KEY_1..N in .env")
-        sys.exit(1)
+    pool = None
 
-    # Build key pool
-    redforge_count = key_split[0] if key_split else None
-    pool = build_key_pool(groq_keys, redforge_count=redforge_count)
+    if provider == "vertex":
+        from redforge.llm.vertex_provider import VertexAIProvider, VERTEX_MODELS
+        if not vertex_project:
+            logger.error("--vertex-project is required when using Vertex AI provider")
+            sys.exit(1)
+        attacker = VertexAIProvider(project=vertex_project, location=vertex_location)
+        target = attacker  # Single instance, no key rotation needed
+        default_models = VERTEX_MODELS
+        cost_label = "Google Cloud credits"
+        provider_label = f"Vertex AI ({vertex_project})"
+    else:
+        # Load keys
+        if groq_keys is None:
+            groq_keys = load_groq_keys_from_env()
+        if not groq_keys:
+            logger.error("No Groq API keys found. Set GROQ_API_KEYS or GROQ_API_KEY_1..N in .env")
+            sys.exit(1)
 
-    # Create providers
-    attacker = GroqProvider(pool, pool_name="redforge")
-    target = GroqProvider(pool, pool_name="target")
+        # Build key pool
+        redforge_count = key_split[0] if key_split else None
+        pool = build_key_pool(groq_keys, redforge_count=redforge_count)
+
+        # Create providers
+        attacker = GroqProvider(pool, pool_name="redforge")
+        target = GroqProvider(pool, pool_name="target")
+        default_models = GROQ_MODELS
+        cost_label = "$0.00 (Groq free tier)"
+        provider_label = f"{len(groq_keys)} Groq keys (FREE tier)"
+
+    # Use defaults from selected provider if not specified
+    if attacker_model is None:
+        attacker_model = default_models.get("attacker")
+    if target_model is None:
+        target_model = default_models.get("target")
 
     # Print banner
     print("")
@@ -262,12 +290,12 @@ def run_harmbench(
     print("     REDFORGE x HARMBENCH EVALUATION")
     print("     Autonomous Red-Teaming Benchmark")
     print("-" * 62)
-    print(f"  Groq keys:        {len(groq_keys)} (FREE tier)")
-    print(f"  Attacker model:   {attacker_model or GROQ_MODELS['attacker']}")
-    print(f"  Target model:     {target_model or GROQ_MODELS['target']}")
+    print(f"  Provider:         {provider_label}")
+    print(f"  Attacker model:   {attacker_model}")
+    print(f"  Target model:     {target_model}")
     print(f"  Behaviors:        {subset_size}")
     print(f"  PAIR iterations:  {max_pair_iterations} per behavior")
-    print(f"  Estimated cost:   $0.00 (Groq free tier)")
+    print(f"  Estimated cost:   {cost_label}")
     print("=" * 62)
     print("")
 
@@ -277,11 +305,13 @@ def run_harmbench(
     logger.info(f"Loaded {len(behaviors)} behaviors")
 
     # Initialize ASO
+    endpoint_url = (f"vertex://{vertex_project}" if provider == "vertex"
+                    else "groq://api.groq.com")
     aso = create_initial_aso(
         target_config={
-            "endpoint_url": "groq://api.groq.com",
-            "model_name": target_model or GROQ_MODELS["target"],
-            "target_type": "groq",
+            "endpoint_url": endpoint_url,
+            "model_name": target_model,
+            "target_type": provider,
         },
         query_budget=subset_size * max_pair_iterations * 3,
     )
@@ -374,7 +404,7 @@ def run_harmbench(
     print(f"  Attack Success Rate (ASR):  {asr:.1%}  ({successful}/{len(behaviors)})")
     print(f"  Behaviors tested:           {len(behaviors)}")
     print(f"  Total tokens used:          {total_tokens:,}")
-    print(f"  Cost:                       $0.00 (Groq free tier)")
+    print(f"  Cost:                       {cost_label}")
     print(f"  Time elapsed:               {elapsed:.1f}s")
     print(f"  OWASP coverage:             {compute_coverage_percentage(aso):.0f}%")
     print(f"  Audit trail:                {len(aso['audit_log'])} entries, "
@@ -396,17 +426,19 @@ def run_harmbench(
         cat_asr = stats["success"] / stats["total"] if stats["total"] else 0
         print(f"  {cat:<25} {cat_asr:>7.1%}   {stats['success']}/{stats['total']}")
 
-    # Key usage
-    pool_summary = pool.get_summary()
-    print(f"\n  Key usage:")
-    for pool_name, info in pool_summary.items():
-        print(f"    {pool_name}: {info['num_keys']} keys")
-        for k in info["usage"]:
-            print(f"      ...{k['key_suffix']}: {k['rpd_used']} reqs, {k['errors']} errors")
+    # Key/provider usage
+    if pool is not None:
+        pool_summary = pool.get_summary()
+        print(f"\n  Key usage:")
+        for pool_name, info in pool_summary.items():
+            print(f"    {pool_name}: {info['num_keys']} keys")
+            for k in info["usage"]:
+                print(f"      ...{k['key_suffix']}: {k['rpd_used']} reqs, {k['errors']} errors")
 
     # Attacker/target stats
     print(f"\n  Attacker requests: {attacker.total_requests} ({attacker.total_tokens_used:,} tokens)")
-    print(f"  Target requests:   {target.total_requests} ({target.total_tokens_used:,} tokens)")
+    if target is not attacker:
+        print(f"  Target requests:   {target.total_requests} ({target.total_tokens_used:,} tokens)")
 
     print("\n" + "=" * 62)
 
@@ -418,9 +450,9 @@ def run_harmbench(
         "config": {
             "subset_size": subset_size,
             "max_pair_iterations": max_pair_iterations,
-            "target_model": target_model or GROQ_MODELS["target"],
-            "attacker_model": attacker_model or GROQ_MODELS["attacker"],
-            "num_keys": len(groq_keys),
+            "target_model": target_model,
+            "attacker_model": attacker_model,
+            "provider": provider,
         },
         "results": {
             "asr": asr,
@@ -428,7 +460,7 @@ def run_harmbench(
             "total": len(behaviors),
             "total_tokens": total_tokens,
             "elapsed_seconds": elapsed,
-            "cost_usd": 0.0,
+            "cost_usd": 0.0 if provider == "groq" else None,
         },
         "category_breakdown": cat_results,
         "detailed_results": [

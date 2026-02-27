@@ -7,7 +7,6 @@ and TAP branching when refinement stalls.
 import logging
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
@@ -45,19 +44,30 @@ class LowLevelPolicy:
         api_key: Optional[str] = None,
         max_pair_iterations: int = 10,
         tap_branches: int = 3,
+        provider: str = "openai",
+        vertex_project: Optional[str] = None,
+        vertex_location: str = "us-central1",
     ):
         self._model_name = model_name
         self._api_key = api_key
         self._max_pair_iterations = max_pair_iterations
         self._tap_branches = tap_branches
+        self._provider = provider
+        self._vertex_project = vertex_project
+        self._vertex_location = vertex_location
         self._llm = None
 
-    def _get_llm(self, temperature: float = 0.9) -> ChatOpenAI:
+    def _get_llm(self, temperature: float = 0.9):
         """Get or create the attacker LLM."""
-        kwargs = {"model": self._model_name, "temperature": temperature}
-        if self._api_key:
-            kwargs["api_key"] = self._api_key
-        return ChatOpenAI(**kwargs)
+        from redforge.llm import create_langchain_llm
+        return create_langchain_llm(
+            provider=self._provider,
+            model_name=self._model_name,
+            api_key=self._api_key,
+            temperature=temperature,
+            vertex_project=self._vertex_project,
+            vertex_location=self._vertex_location,
+        )
 
     def generate_prompt(
         self,

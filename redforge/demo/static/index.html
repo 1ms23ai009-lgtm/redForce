@@ -105,6 +105,49 @@
   }
   .btn-primary:hover { background: var(--red-dim); }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-harmbench {
+    background: linear-gradient(135deg, #cc2020, #ff6020);
+    border-color: #ff4040;
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn-harmbench:hover { background: linear-gradient(135deg, #aa1818, #dd5018); }
+
+  /* ── HarmBench Config ────────────────────────────── */
+  .hb-config {
+    display: none;
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 16px 24px;
+    align-items: center;
+    gap: 20px;
+  }
+  .hb-config.visible { display: flex; }
+  .hb-config label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .hb-config input {
+    font-family: var(--font);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: #fff;
+    padding: 6px 10px;
+    width: 80px;
+    margin-left: 8px;
+  }
+  .hb-config input:focus { outline: none; border-color: var(--red); }
+  .hb-cost {
+    font-size: 11px;
+    color: var(--yellow);
+    margin-left: auto;
+  }
 
   /* ── Layout ───────────────────────────────────────── */
   .dashboard {
@@ -175,7 +218,7 @@
   .feed {
     grid-column: 1;
     grid-row: 2;
-    max-height: 600px;
+    max-height: 75vh;
     display: flex;
     flex-direction: column;
   }
@@ -243,7 +286,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-height: 600px;
+    max-height: 75vh;
   }
 
   /* ── Scenario Table ───────────────────────────────── */
@@ -385,13 +428,24 @@
   <div class="header-right">
     <span class="status-dot" id="statusDot"></span>
     <span id="statusText" style="font-size:11px;color:var(--text-dim)">Connecting...</span>
-    <button class="btn btn-primary" id="btnAttack" disabled>Launch Attack</button>
+    <button class="btn btn-primary" id="btnAttack" disabled>Mock Demo</button>
+    <button class="btn btn-harmbench" id="btnHarmbench" disabled>HarmBench</button>
     <button class="btn" id="btnReset">Reset</button>
   </div>
 </header>
 
 <!-- ── Dashboard Grid ──────────────────────────────── -->
 <div class="dashboard">
+
+  <!-- HarmBench Config -->
+  <div class="hb-config" id="hbConfig">
+    <span style="color:var(--red);font-weight:600;font-size:12px;">HARMBENCH CONFIG</span>
+    <label>Behaviors: <input type="number" id="hbSubset" value="500" min="1" max="1528"></label>
+    <label>Max Iterations: <input type="number" id="hbIter" value="5" min="1" max="20"></label>
+    <span class="hb-cost" id="hbCost">Est. cost: ~$2.45</span>
+    <button class="btn btn-harmbench" id="btnHbRun">Run HarmBench</button>
+    <button class="btn" id="btnHbCancel">Cancel</button>
+  </div>
 
   <!-- Phase Banner -->
   <div class="phase-banner" id="phaseBanner">
@@ -425,12 +479,12 @@
       <div class="metric-label">OWASP Coverage</div>
     </div>
     <div class="metric-card">
-      <div class="metric-value green" id="metricControl">—</div>
-      <div class="metric-label">Control Test</div>
+      <div class="metric-value green" id="metricASR">—</div>
+      <div class="metric-label">ASR</div>
     </div>
     <div class="metric-card">
-      <div class="metric-value" id="metricNash">—</div>
-      <div class="metric-label">Nash Value</div>
+      <div class="metric-value" id="metricTokens">—</div>
+      <div class="metric-label">Tokens Used</div>
     </div>
   </div>
 
@@ -510,11 +564,13 @@ function connect() {
     document.getElementById('statusDot').className = 'status-dot connected';
     document.getElementById('statusText').textContent = 'Connected';
     document.getElementById('btnAttack').disabled = false;
+    document.getElementById('btnHarmbench').disabled = false;
   };
   ws.onclose = () => {
     document.getElementById('statusDot').className = 'status-dot';
     document.getElementById('statusText').textContent = 'Disconnected';
     document.getElementById('btnAttack').disabled = true;
+    document.getElementById('btnHarmbench').disabled = true;
     setTimeout(connect, 2000);
   };
   ws.onmessage = (e) => {
@@ -720,8 +776,20 @@ function showSummary(data) {
   document.getElementById('metricTotal').textContent = data.total_scenarios;
   document.getElementById('metricRisk').textContent = data.risk_score + '/10';
   document.getElementById('metricCoverage').textContent = data.coverage + '%';
-  document.getElementById('metricControl').textContent = data.control_passed ? 'PASS' : 'FAIL';
-  document.getElementById('metricNash').textContent = data.nash_value;
+  if (data.asr) {
+    document.getElementById('metricASR').textContent = data.asr;
+    document.getElementById('metricASR').className = 'metric-value red';
+  } else {
+    document.getElementById('metricASR').textContent = '—';
+  }
+  if (data.total_tokens) {
+    const tk = data.total_tokens > 1000000
+      ? (data.total_tokens / 1000000).toFixed(1) + 'M'
+      : (data.total_tokens / 1000).toFixed(0) + 'K';
+    document.getElementById('metricTokens').textContent = tk;
+  } else {
+    document.getElementById('metricTokens').textContent = '—';
+  }
   showProgress(false);
 }
 
@@ -738,7 +806,7 @@ function resetDashboard() {
     '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">Waiting for attack...</td></tr>';
   document.getElementById('owaspBody').innerHTML =
     '<div style="text-align:center;color:var(--text-dim);padding:16px;">Waiting for results...</div>';
-  ['metricExploits','metricTotal','metricRisk','metricCoverage','metricControl','metricNash'].forEach(id => {
+  ['metricExploits','metricTotal','metricRisk','metricCoverage','metricASR','metricTokens'].forEach(id => {
     document.getElementById(id).textContent = '—';
   });
   showProgress(false);
@@ -764,6 +832,40 @@ document.getElementById('btnReset').addEventListener('click', () => {
     ws.send(JSON.stringify({ command: 'reset' }));
   }
 });
+
+// ── HarmBench Controls ────────────────────────────────
+document.getElementById('btnHarmbench').addEventListener('click', () => {
+  document.getElementById('hbConfig').classList.add('visible');
+  updateHbCost();
+});
+document.getElementById('btnHbCancel').addEventListener('click', () => {
+  document.getElementById('hbConfig').classList.remove('visible');
+});
+document.getElementById('btnHbRun').addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const subset = parseInt(document.getElementById('hbSubset').value) || 500;
+    const maxIter = parseInt(document.getElementById('hbIter').value) || 5;
+    resetDashboard();
+    ws.send(JSON.stringify({
+      command: 'start_harmbench',
+      subset: subset,
+      max_iterations: maxIter,
+    }));
+    document.getElementById('hbConfig').classList.remove('visible');
+  }
+});
+
+function updateHbCost() {
+  const subset = parseInt(document.getElementById('hbSubset').value) || 500;
+  const maxIter = parseInt(document.getElementById('hbIter').value) || 5;
+  const totalCalls = subset * maxIter * 3;
+  const inputTokens = 2600 * maxIter * subset;
+  const outputTokens = 1792 * maxIter * subset;
+  const cost = (inputTokens / 1e6) * 0.10 + (outputTokens / 1e6) * 0.40;
+  document.getElementById('hbCost').textContent = `Est. cost: ~$${cost.toFixed(2)} (${totalCalls.toLocaleString()} API calls)`;
+}
+document.getElementById('hbSubset').addEventListener('input', updateHbCost);
+document.getElementById('hbIter').addEventListener('input', updateHbCost);
 
 connect();
 renderOwasp();

@@ -105,6 +105,16 @@ async def websocket_endpoint(ws: WebSocket):
                     # Start attack in background thread
                     thread = threading.Thread(target=_run_attack_sequence, daemon=True)
                     thread.start()
+            elif msg.get("command") == "start_harmbench":
+                if not run_state["running"]:
+                    subset = msg.get("subset", 50)
+                    max_iter = msg.get("max_iterations", 5)
+                    thread = threading.Thread(
+                        target=_run_harmbench_sequence,
+                        args=(subset, max_iter),
+                        daemon=True,
+                    )
+                    thread.start()
             elif msg.get("command") == "reset":
                 attack_log.clear()
                 run_state["running"] = False
@@ -326,6 +336,201 @@ def _run_attack_sequence():
     })
 
     logger.info(f"Attack sequence complete: {exploits_found}/{total_scenarios - 1} exploits, Nash={nash_value:.4f}")
+
+
+# ── HarmBench Live Runner ─────────────────────────────────────────
+
+def _run_harmbench_sequence(subset_size: int = 50, max_iterations: int = 5):
+    """Run HarmBench PAIR attacks via Vertex AI and push events in real time."""
+    from redforge.llm.vertex_provider import VertexAIProvider, VERTEX_MODELS
+    from redforge.benchmarks.harmbench_loader import load_behaviors
+    from redforge.benchmarks.harmbench_runner import (
+        pair_attack, _parse_judge_verdict, CATEGORY_TO_OWASP,
+        PAIR_SYSTEM, PAIR_USER_TEMPLATE, JUDGE_SYSTEM, JUDGE_USER_TEMPLATE,
+    )
+
+    run_state["running"] = True
+    run_state["phase"] = "starting"
+
+    # Read project from env or default
+    vertex_project = os.environ.get("VERTEX_PROJECT", "redforge")
+    vertex_location = os.environ.get("VERTEX_LOCATION", "us-central1")
+
+    sync_broadcast({
+        "type": "phase",
+        "data": {"phase": "init", "message": f"Initializing Vertex AI ({vertex_project})..."},
+    })
+
+    try:
+        attacker = VertexAIProvider(project=vertex_project, location=vertex_location)
+    except Exception as e:
+        sync_broadcast({
+            "type": "phase",
+            "data": {"phase": "error", "message": f"Vertex AI init failed: {e}"},
+        })
+        run_state["running"] = False
+        run_state["phase"] = "idle"
+        return
+
+    target = attacker  # Same provider for both
+    default_models = VERTEX_MODELS
+    attacker_model = default_models.get("attacker")
+    target_model = default_models.get("target")
+
+    sync_broadcast({
+        "type": "phase",
+        "data": {"phase": "loading", "message": f"Loading {subset_size} HarmBench behaviors..."},
+    })
+
+    behaviors = load_behaviors(subset_size=subset_size)
+    total = len(behaviors)
+
+    run_state["phase"] = "attacking"
+    sync_broadcast({
+        "type": "phase",
+        "data": {"phase": "attacking", "message": f"Running PAIR attacks on {total} behaviors via Gemini..."},
+    })
+
+    results = []
+    successful = 0
+    total_tokens = 0
+
+    for idx, behavior in enumerate(behaviors):
+        behavior_text = behavior["text"]
+        category = behavior["semantic_category"]
+        owasp = CATEGORY_TO_OWASP.get(category, "LLM01_prompt_injection")
+
+        # Broadcast: starting this behavior
+        sync_broadcast({
+            "type": "attack_start",
+            "data": {
+                "index": idx,
+                "total": total,
+                "name": behavior_text[:60] + ("..." if len(behavior_text) > 60 else ""),
+                "category": category,
+                "owasp": owasp,
+                "severity": "high",
+                "num_prompts": max_iterations,
+            },
+        })
+
+        # Run PAIR attack with per-iteration broadcasting
+        prev_attempt = "None (first attempt)"
+        prev_response = "None"
+        behavior_tokens = 0
+        attack_success = False
+        final_verdict = {"success": False, "confidence": 0.0, "reasoning": "Max iterations reached"}
+
+        for iteration in range(1, max_iterations + 1):
+            try:
+                # Step 1: Attacker generates prompt
+                attacker_msgs = [
+                    {"role": "system", "content": PAIR_SYSTEM},
+                    {"role": "user", "content": PAIR_USER_TEMPLATE.format(
+                        behavior=behavior_text,
+                        previous_attempt=prev_attempt[:500],
+                        previous_response=prev_response[:500],
+                    )},
+                ]
+                attack_result = attacker.chat(
+                    attacker_msgs, model=attacker_model,
+                    role="attacker", temperature=0.9, max_tokens=512,
+                )
+                attack_prompt = attack_result["content"].strip()
+                behavior_tokens += attack_result["tokens"]["total"]
+
+                if not attack_prompt:
+                    continue
+
+                # Step 2: Target responds
+                target_msgs = [{"role": "user", "content": attack_prompt}]
+                target_result = target.chat(
+                    target_msgs, model=target_model,
+                    role="target", temperature=0.7, max_tokens=1024,
+                )
+                target_response = target_result["content"].strip()
+                behavior_tokens += target_result["tokens"]["total"]
+
+                # Broadcast turn
+                sync_broadcast({
+                    "type": "attack_turn",
+                    "data": {
+                        "index": idx,
+                        "turn": iteration - 1,
+                        "prompt": attack_prompt[:200],
+                        "response": target_response[:300],
+                        "tokens": behavior_tokens,
+                    },
+                })
+
+                # Step 3: Judge evaluates
+                judge_msgs = [
+                    {"role": "system", "content": JUDGE_SYSTEM},
+                    {"role": "user", "content": JUDGE_USER_TEMPLATE.format(
+                        behavior=behavior_text,
+                        response=target_response[:1500],
+                    )},
+                ]
+                judge_result = attacker.chat(
+                    judge_msgs, role="judge", temperature=0.1, max_tokens=256,
+                )
+                behavior_tokens += judge_result["tokens"]["total"]
+
+                verdict = _parse_judge_verdict(judge_result["content"])
+
+                if verdict.get("success", False):
+                    attack_success = True
+                    final_verdict = verdict
+                    break
+
+                prev_attempt = attack_prompt
+                prev_response = target_response
+
+            except Exception as e:
+                logger.warning(f"Behavior {idx} iteration {iteration} error: {e}")
+                time.sleep(2)
+                continue
+
+        total_tokens += behavior_tokens
+
+        if attack_success:
+            successful += 1
+
+        result_data = {
+            "index": idx,
+            "name": behavior_text[:60] + ("..." if len(behavior_text) > 60 else ""),
+            "success": attack_success,
+            "verdict": "EXPLOITED" if attack_success else "BLOCKED",
+            "score": final_verdict.get("confidence", 0.0),
+            "category": category,
+            "owasp": owasp,
+            "severity": "high" if attack_success else "none",
+            "is_control": False,
+            "control_passed": None,
+        }
+        results.append(result_data)
+
+        sync_broadcast({"type": "attack_result", "data": result_data})
+
+    # Summary
+    asr = successful / total if total else 0.0
+    run_state["phase"] = "complete"
+    run_state["running"] = False
+
+    summary = {
+        "total_scenarios": total,
+        "exploits_found": successful,
+        "control_passed": True,
+        "risk_score": round(asr * 10, 1),
+        "coverage": round((len(set(r["owasp"] for r in results if r["success"])) / 10) * 100, 1),
+        "nash_value": round(asr, 4),
+        "asr": f"{asr:.1%}",
+        "total_tokens": total_tokens,
+        "results": results,
+    }
+
+    sync_broadcast({"type": "summary", "data": summary})
+    logger.info(f"HarmBench complete: ASR={asr:.1%} ({successful}/{total}), tokens={total_tokens:,}")
 
 
 # ── Startup ───────────────────────────────────────────────────────────

@@ -257,14 +257,24 @@ def build_redforge_graph(
 
         return state
 
+    # Provider settings for LLM calls within graph nodes
+    is_vertex = config.provider == "vertex"
+    _provider = config.provider if is_vertex else "openai"
+    _vertex_project = config.vertex_project if is_vertex else None
+    _vertex_location = config.vertex_location if is_vertex else "us-central1"
+
     def graph_update_node(state: AttackStateObject) -> AttackStateObject:
         """Update attack graph from latest actions."""
         try:
             existing_graph = deserialize_graph(state["attack_graph"])
+            graph_model = config.vertex_graph_model if is_vertex else config.graph_extractor_model
             updated_graph = extract_graph_from_logs(
                 attack_history=state["attack_history"],
-                model_name=config.graph_extractor_model,
+                model_name=graph_model,
                 existing_graph=existing_graph,
+                provider=_provider,
+                vertex_project=_vertex_project,
+                vertex_location=_vertex_location,
             )
             update_graph_effort_scores(updated_graph, state)
             state["attack_graph"] = serialize_graph(updated_graph)
@@ -291,12 +301,16 @@ def build_redforge_graph(
             graph = deserialize_graph(state["attack_graph"])
             nash = state.get("nash_equilibrium")
             if nash:
+                digest_model = config.vertex_digest_model if is_vertex else config.digest_model
                 digest = generate_digest(
                     attack_graph=graph,
                     nash_result=nash,
                     mode=config.digest_mode,
                     aso=state,
-                    model_name=config.digest_model,
+                    model_name=digest_model,
+                    provider=_provider,
+                    vertex_project=_vertex_project,
+                    vertex_location=_vertex_location,
                 )
                 state["strategic_digest"] = digest
         except Exception as e:

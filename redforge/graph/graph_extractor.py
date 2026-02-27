@@ -9,7 +9,6 @@ import logging
 from typing import Optional
 
 import networkx as nx
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from redforge.config import max_graph_nodes
@@ -76,6 +75,9 @@ def extract_graph_from_logs(
     model_name: str = "gpt-4o-mini",
     existing_graph: Optional[nx.DiGraph] = None,
     api_key: Optional[str] = None,
+    provider: str = "openai",
+    vertex_project: Optional[str] = None,
+    vertex_location: str = "us-central1",
 ) -> nx.DiGraph:
     """Extract an attack graph from conversation logs using an LLM.
 
@@ -84,6 +86,9 @@ def extract_graph_from_logs(
         model_name: LLM model to use for extraction
         existing_graph: Optional existing graph to merge with
         api_key: Optional API key override
+        provider: LLM provider ("openai", "vertex", etc.)
+        vertex_project: GCP project ID (for Vertex AI)
+        vertex_location: GCP region (for Vertex AI)
 
     Returns:
         Updated NetworkX DiGraph
@@ -99,11 +104,15 @@ def extract_graph_from_logs(
 
     # Call LLM for extraction
     try:
-        kwargs = {"model": model_name, "temperature": 0.1}
-        if api_key:
-            kwargs["api_key"] = api_key
-
-        llm = ChatOpenAI(**kwargs)
+        from redforge.llm import create_langchain_llm
+        llm = create_langchain_llm(
+            provider=provider,
+            model_name=model_name,
+            api_key=api_key,
+            temperature=0.1,
+            vertex_project=vertex_project,
+            vertex_location=vertex_location,
+        )
         messages = [
             SystemMessage(content=EXTRACTION_SYSTEM_PROMPT),
             HumanMessage(

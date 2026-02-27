@@ -26,6 +26,9 @@ def generate_digest(
     model_name: str = "gpt-4o-mini",
     api_key: Optional[str] = None,
     strategy_library_context: Optional[str] = None,
+    provider: str = "openai",
+    vertex_project: Optional[str] = None,
+    vertex_location: str = "us-central1",
 ) -> str:
     """Generate a strategic digest for specialist agents.
 
@@ -70,6 +73,9 @@ def generate_digest(
             aso_summary=aso_summary,
             model_name=model_name,
             api_key=api_key,
+            provider=provider,
+            vertex_project=vertex_project,
+            vertex_location=vertex_location,
         )
 
         if digest:
@@ -89,6 +95,9 @@ def generate_digest_from_aso(
     mode: str = "llm",
     model_name: str = "gpt-4o-mini",
     api_key: Optional[str] = None,
+    provider: str = "openai",
+    vertex_project: Optional[str] = None,
+    vertex_location: str = "us-central1",
 ) -> str:
     """Convenience function to generate digest directly from ASO.
 
@@ -107,6 +116,9 @@ def generate_digest_from_aso(
         aso=aso,
         model_name=model_name,
         api_key=api_key,
+        provider=provider,
+        vertex_project=vertex_project,
+        vertex_location=vertex_location,
     )
 
 

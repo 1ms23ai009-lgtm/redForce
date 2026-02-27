@@ -8,8 +8,6 @@ import json
 import logging
 from typing import Optional
 
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from redforge.config import VERDICT_CONFIRMED, VERDICT_PARTIAL, VERDICT_FALSE_POSITIVE, VERDICT_FAILED
@@ -74,22 +72,29 @@ class LLMJudge:
         self,
         model_name: str = "claude-3-5-sonnet-20241022",
         api_key: Optional[str] = None,
+        provider: str = "anthropic",
+        vertex_project: Optional[str] = None,
+        vertex_location: str = "us-central1",
     ):
         self._model_name = model_name
         self._api_key = api_key
+        self._provider = provider
+        self._vertex_project = vertex_project
+        self._vertex_location = vertex_location
         self._llm = None
 
     def _get_llm(self):
         """Lazy-initialize the judge LLM."""
         if self._llm is None:
-            kwargs = {"model": self._model_name, "temperature": 0.0}
-            if self._api_key:
-                kwargs["api_key"] = self._api_key
-
-            if "claude" in self._model_name:
-                self._llm = ChatAnthropic(**kwargs)
-            else:
-                self._llm = ChatOpenAI(**kwargs)
+            from redforge.llm import create_langchain_llm
+            self._llm = create_langchain_llm(
+                provider=self._provider,
+                model_name=self._model_name,
+                api_key=self._api_key,
+                temperature=0.0,
+                vertex_project=self._vertex_project,
+                vertex_location=self._vertex_location,
+            )
         return self._llm
 
     def evaluate_response(

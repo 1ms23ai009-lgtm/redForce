@@ -9,7 +9,6 @@ import logging
 from typing import Optional
 
 import networkx as nx
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from redforge.graph.attack_graph import get_graph_summary
@@ -57,6 +56,9 @@ def generate_llm_digest(
     aso_summary: Optional[dict] = None,
     model_name: str = "gpt-4o-mini",
     api_key: Optional[str] = None,
+    provider: str = "openai",
+    vertex_project: Optional[str] = None,
+    vertex_location: str = "us-central1",
 ) -> str:
     """Generate a strategic digest using an LLM interpreter.
 
@@ -66,6 +68,9 @@ def generate_llm_digest(
         aso_summary: Optional summary of current ASO state
         model_name: LLM model to use for digest generation
         api_key: Optional API key override
+        provider: LLM provider ("openai", "vertex", etc.)
+        vertex_project: GCP project ID (for Vertex AI)
+        vertex_location: GCP region (for Vertex AI)
 
     Returns:
         Markdown-formatted digest string
@@ -74,11 +79,15 @@ def generate_llm_digest(
     context = _build_context(attack_graph, nash_result, aso_summary)
 
     try:
-        kwargs = {"model": model_name, "temperature": 0.3}
-        if api_key:
-            kwargs["api_key"] = api_key
-
-        llm = ChatOpenAI(**kwargs)
+        from redforge.llm import create_langchain_llm
+        llm = create_langchain_llm(
+            provider=provider,
+            model_name=model_name,
+            api_key=api_key,
+            temperature=0.3,
+            vertex_project=vertex_project,
+            vertex_location=vertex_location,
+        )
         messages = [
             SystemMessage(content=DIGEST_SYSTEM_PROMPT),
             HumanMessage(content=context),

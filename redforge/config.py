@@ -41,12 +41,26 @@ class RedForgeConfig:
     audit_log_dir: str = "logs/audit"
     log_level: str = "INFO"
 
+    # Provider selection: "groq" or "vertex"
+    provider: str = field(default_factory=lambda: os.getenv("REDFORGE_PROVIDER", "groq"))
+
     # Groq settings (free tier)
     groq_attacker_model: str = "llama-3.3-70b-versatile"
     groq_judge_model: str = "llama-3.3-70b-versatile"
     groq_target_model: str = "llama-3.1-8b-instant"
     groq_rpm: int = 30     # requests per minute per key
     groq_rpd: int = 14400  # requests per day per key
+
+    # Vertex AI settings (Google Cloud)
+    vertex_project: str = field(default_factory=lambda: os.getenv("VERTEX_PROJECT", ""))
+    vertex_location: str = field(
+        default_factory=lambda: os.getenv("VERTEX_LOCATION", "us-central1")
+    )
+    vertex_attacker_model: str = "gemini-2.0-flash"
+    vertex_judge_model: str = "gemini-2.0-flash"
+    vertex_target_model: str = "gemini-2.0-flash"
+    vertex_digest_model: str = "gemini-2.0-flash"
+    vertex_graph_model: str = "gemini-2.0-flash"
 
     # API keys (loaded from environment)
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
@@ -58,17 +72,30 @@ class RedForgeConfig:
         """Validate configuration and return list of errors."""
         errors = []
 
-        # Need at least one LLM provider
-        from redforge.llm.key_manager import load_groq_keys_from_env
-        groq_keys = load_groq_keys_from_env()
-        has_groq = len(groq_keys) > 0
-        has_openai = bool(self.openai_api_key)
-
-        if not has_groq and not has_openai:
+        if self.provider not in ("groq", "vertex"):
             errors.append(
-                "No LLM API keys set. Provide OPENAI_API_KEY or "
-                "GROQ_API_KEY_1..N in your .env file"
+                f"Unknown provider: {self.provider}. Must be 'groq' or 'vertex'."
             )
+
+        # Validate provider-specific settings
+        if self.provider == "vertex":
+            if not self.vertex_project:
+                errors.append(
+                    "VERTEX_PROJECT must be set when using Vertex AI provider. "
+                    "Set it in .env or pass --vertex-project."
+                )
+        else:
+            # Need at least one LLM provider for Groq mode
+            from redforge.llm.key_manager import load_groq_keys_from_env
+            groq_keys = load_groq_keys_from_env()
+            has_groq = len(groq_keys) > 0
+            has_openai = bool(self.openai_api_key)
+
+            if not has_groq and not has_openai:
+                errors.append(
+                    "No LLM API keys set. Provide OPENAI_API_KEY or "
+                    "GROQ_API_KEY_1..N in your .env file"
+                )
 
         if self.digest_mode not in ("llm", "algorithmic"):
             errors.append(f"Invalid digest_mode: {self.digest_mode}")

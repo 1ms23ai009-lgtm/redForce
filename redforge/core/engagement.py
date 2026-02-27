@@ -77,16 +77,27 @@ class EngagementManager:
             ),
         )
 
+        # Determine provider settings
+        is_vertex = self.config.provider == "vertex"
+
         self.low_level_policy = LowLevelPolicy(
-            model_name=self.config.attacker_model,
-            api_key=self.config.openai_api_key,
+            model_name=(self.config.vertex_attacker_model if is_vertex
+                        else self.config.attacker_model),
+            api_key=None if is_vertex else self.config.openai_api_key,
             max_pair_iterations=self.config.max_pair_iterations,
             tap_branches=self.config.tap_branches,
+            provider=self.config.provider if is_vertex else "openai",
+            vertex_project=self.config.vertex_project if is_vertex else None,
+            vertex_location=self.config.vertex_location if is_vertex else "us-central1",
         )
 
         self.judge = JudgeEnsemble(
-            judge_model=self.config.judge_model,
-            judge_api_key=self.config.anthropic_api_key,
+            judge_model=(self.config.vertex_judge_model if is_vertex
+                         else self.config.judge_model),
+            judge_api_key=None if is_vertex else self.config.anthropic_api_key,
+            provider=self.config.provider if is_vertex else "anthropic",
+            vertex_project=self.config.vertex_project if is_vertex else None,
+            vertex_location=self.config.vertex_location if is_vertex else "us-central1",
         )
 
         self.strategy_library = StrategyLibrary(

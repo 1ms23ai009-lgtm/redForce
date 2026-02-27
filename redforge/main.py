@@ -24,9 +24,20 @@ def setup_logging(level: str = "INFO"):
     )
 
 
+def _apply_provider_args(config, args):
+    """Apply --provider, --vertex-project, --vertex-location to config."""
+    if hasattr(args, "provider") and args.provider:
+        config.provider = args.provider
+    if hasattr(args, "vertex_project") and args.vertex_project:
+        config.vertex_project = args.vertex_project
+    if hasattr(args, "vertex_location") and args.vertex_location:
+        config.vertex_location = args.vertex_location
+
+
 def cmd_engage(args):
     """Run a red-team engagement."""
     config = RedForgeConfig()
+    _apply_provider_args(config, args)
 
     if args.attacker_model:
         config.attacker_model = args.attacker_model
@@ -189,8 +200,11 @@ def cmd_train(args):
 
 
 def cmd_harmbench(args):
-    """Run HarmBench evaluation using Groq (free)."""
+    """Run HarmBench evaluation."""
     from redforge.benchmarks.harmbench_runner import run_harmbench
+
+    config = RedForgeConfig()
+    _apply_provider_args(config, args)
 
     key_split = None
     if args.key_split:
@@ -204,16 +218,32 @@ def cmd_harmbench(args):
         attacker_model=args.attacker_model,
         key_split=key_split,
         output_dir=args.output_dir,
+        provider=config.provider,
+        vertex_project=config.vertex_project,
+        vertex_location=config.vertex_location,
     )
 
     print(f"\nASR: {result['asr']:.1%}")
-    print(f"Cost: ${result['cost']:.2f}")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="REDFORGE - Autonomous AI Red-Teaming System"
     )
+    # Global provider arguments
+    parser.add_argument(
+        "--provider", default=None, choices=["groq", "vertex"],
+        help="LLM provider: groq (free) or vertex (Google Cloud)",
+    )
+    parser.add_argument(
+        "--vertex-project", default=None,
+        help="Google Cloud project ID (required for --provider vertex)",
+    )
+    parser.add_argument(
+        "--vertex-location", default=None,
+        help="Google Cloud region (default: us-central1)",
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # engage command
@@ -285,7 +315,7 @@ def main():
 
     # harmbench command
     hb_parser = subparsers.add_parser(
-        "harmbench", help="Run HarmBench evaluation (FREE via Groq)"
+        "harmbench", help="Run HarmBench evaluation (Groq free tier or Vertex AI)"
     )
     hb_parser.add_argument(
         "--subset", type=int, default=50,
