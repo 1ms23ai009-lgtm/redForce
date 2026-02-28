@@ -1072,7 +1072,131 @@ def _run_pipeline_attack(target_url: str = "http://localhost:8900"):
 
     client.close()
 
-    # Phase 3: Summary
+    # Phase 3: Build Attack Graph & Nash Equilibrium
+    run_state["phase"] = "analysis"
+    sync_broadcast({
+        "type": "phase",
+        "data": {"phase": "analysis", "message": "Phase 3: Analysis — building attack graph and computing Nash equilibrium..."},
+    })
+
+    graph_data = None
+    nash_data = None
+    graph_summary = {}
+    num_paths = 0
+
+    try:
+        from redforge.graph.attack_graph import (
+            create_attack_graph, add_node, add_edge,
+            mark_node_vulnerable, get_attack_paths,
+            get_graph_summary, serialize_graph,
+        )
+        from redforge.graph.nash import compute_nash_equilibrium
+
+        graph = create_attack_graph()
+
+        # Build pipeline nodes
+        nids = {}
+        nids["user_input"] = add_node(graph, "User Input", "user_input")
+        nids["input_guard"] = add_node(graph, "Input Guard", "guardrail")
+        nids["rag"] = add_node(graph, "RAG Retrieval", "memory")
+        nids["memory"] = add_node(graph, "Session Memory", "memory")
+        nids["llm_core"] = add_node(graph, "LLM Core", "agent")
+        nids["system_prompt"] = add_node(graph, "System Prompt", "system_prompt")
+        nids["output_guard"] = add_node(graph, "Output Guard", "guardrail")
+        nids["tool_db"] = add_node(graph, "query_db", "tool")
+        nids["tool_file"] = add_node(graph, "read_file", "tool")
+        nids["tool_calc"] = add_node(graph, "calculate", "tool")
+
+        # Pipeline flow edges
+        add_edge(graph, nids["user_input"], nids["input_guard"], "information_flow", effort_score=0.1)
+        add_edge(graph, nids["input_guard"], nids["llm_core"], "information_flow", effort_score=0.3)
+        add_edge(graph, nids["input_guard"], nids["rag"], "information_flow", effort_score=0.2)
+        add_edge(graph, nids["input_guard"], nids["memory"], "information_flow", effort_score=0.2)
+        add_edge(graph, nids["rag"], nids["llm_core"], "information_flow", effort_score=0.2)
+        add_edge(graph, nids["memory"], nids["llm_core"], "information_flow", effort_score=0.2)
+        add_edge(graph, nids["system_prompt"], nids["llm_core"], "trust_relationship", effort_score=0.1)
+        add_edge(graph, nids["llm_core"], nids["output_guard"], "information_flow", effort_score=0.2)
+        for tk in ["tool_db", "tool_file", "tool_calc"]:
+            add_edge(graph, nids["llm_core"], nids[tk], "information_flow", effort_score=0.4)
+            add_edge(graph, nids[tk], nids["output_guard"], "information_flow", effort_score=0.3)
+
+        # Mark vulnerabilities from attack results
+        vuln_map = {
+            "prompt_injection": ["system_prompt", "input_guard"],
+            "data_exfiltration": ["rag"],
+            "rag_poisoning": ["rag"],
+            "tool_abuse": ["tool_db", "tool_file", "tool_calc"],
+            "guardrail_bypass": ["input_guard", "output_guard"],
+            "memory_poison": ["memory"],
+            "social_engineering": ["llm_core"],
+        }
+        for r in results:
+            if r.get("success"):
+                cat = r.get("category", "").lower().replace(" ", "_")
+                targets = vuln_map.get(cat, [])
+                for target_key in targets:
+                    if target_key in nids:
+                        try:
+                            mark_node_vulnerable(graph, nids[target_key], r.get("severity", "medium"))
+                        except Exception:
+                            pass
+
+        # Add exploit bypass paths
+        exploit_cats = set(r["category"].lower().replace(" ", "_") for r in results if r.get("success"))
+        if "prompt_injection" in exploit_cats:
+            try:
+                add_edge(graph, nids["user_input"], nids["system_prompt"], "bypass_path", effort_score=0.2, confirmed=True)
+            except Exception:
+                pass
+        if "guardrail_bypass" in exploit_cats:
+            try:
+                add_edge(graph, nids["user_input"], nids["llm_core"], "bypass_path", effort_score=0.3, confirmed=True)
+            except Exception:
+                pass
+
+        # Serialize and broadcast graph
+        graph_serial = serialize_graph(graph)
+        graph_summary = get_graph_summary(graph)
+        paths = get_attack_paths(graph)
+        num_paths = len(paths)
+
+        graph_data = {
+            "graph": graph_serial,
+            "summary": {
+                "total_nodes": graph_summary.get("total_nodes", 0),
+                "total_edges": graph_summary.get("total_edges", 0),
+                "vulnerable_nodes": graph_summary.get("vulnerable_nodes", 0),
+                "confirmed_edges": graph_summary.get("confirmed_edges", 0),
+                "attack_paths": num_paths,
+            },
+        }
+        sync_broadcast({"type": "graph_update", "data": graph_data})
+
+        # Compute Nash equilibrium
+        try:
+            nash_result = compute_nash_equilibrium(graph)
+            if nash_result:
+                # Add node names for the frontend
+                node_names = {}
+                for node_id in graph.nodes():
+                    node_names[node_id] = graph.nodes[node_id].get("name", node_id[:8])
+
+                nash_data = {
+                    "equilibrium_value": nash_result.get("equilibrium_value", 0),
+                    "defender_strategy": nash_result.get("defender_strategy", {}),
+                    "attacker_strategy": nash_result.get("attacker_strategy", []),
+                    "node_names": node_names,
+                }
+                sync_broadcast({"type": "nash_update", "data": nash_data})
+        except Exception as e:
+            logger.warning(f"Nash computation failed: {type(e).__name__}: {e}")
+
+    except ImportError as e:
+        logger.warning(f"Graph/Nash modules not available: {e}")
+    except Exception as e:
+        logger.warning(f"Graph building failed: {type(e).__name__}: {e}")
+
+    # Phase 4: Summary
     run_state["phase"] = "complete"
     run_state["running"] = False
 
@@ -1082,18 +1206,22 @@ def _run_pipeline_attack(target_url: str = "http://localhost:8900"):
     asr = exploits_found / total_scenarios if total_scenarios else 0
     risk_score = round(asr * 10, 1)
 
+    nash_eq_value = nash_data.get("equilibrium_value", 0) if nash_data else round(asr, 4)
+
     summary = {
         "total_scenarios": total_scenarios,
         "exploits_found": exploits_found,
         "control_passed": True,
         "risk_score": risk_score,
         "coverage": round((len(owasp_hit) / 10) * 100, 1),
-        "nash_value": round(asr, 4),
+        "nash_value": round(nash_eq_value, 4),
         "asr": f"{asr:.1%}",
         "categories_exploited": list(categories_exploited),
         "owasp_categories_hit": list(owasp_hit),
         "results": results,
         "mode": "pipeline_attack",
+        "graph_summary": graph_summary,
+        "attack_paths": num_paths,
     }
 
     sync_broadcast({"type": "summary", "data": summary})

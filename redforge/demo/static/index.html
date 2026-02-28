@@ -510,6 +510,122 @@
   .plan-item .plan-agent { font-weight: 600; color: #ddd; }
   .plan-item .plan-reason { color: var(--text-dim); font-size: 10px; }
 
+  /* ── Attack Graph Panel ─────────────────────────── */
+  .graph-panel {
+    grid-column: 1 / -1;
+    display: none;
+  }
+  .graph-panel.visible { display: block; }
+  .graph-container {
+    height: 400px;
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .graph-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Nash Equilibrium Panel ──────────────────────── */
+  .nash-panel {
+    grid-column: 1 / -1;
+    display: none;
+  }
+  .nash-panel.visible { display: block; }
+  .nash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 12px;
+  }
+  .nash-value-big {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--red);
+    text-align: center;
+    padding: 16px;
+  }
+  .nash-strategy-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .nash-bar {
+    height: 6px;
+    background: var(--red);
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .nash-path-item {
+    padding: 8px 10px;
+    background: var(--bg);
+    border-radius: 4px;
+    margin-bottom: 6px;
+    border-left: 2px solid var(--red);
+  }
+  .nash-path-prob {
+    font-weight: 700;
+    color: var(--red);
+    font-size: 13px;
+  }
+  .nash-path-names {
+    font-size: 11px;
+    color: var(--cyan);
+    margin-top: 4px;
+    word-break: break-word;
+  }
+  .nash-path-effort {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ── Graph Summary Cards ─────────────────────────── */
+  .graph-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+  .graph-stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .graph-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .graph-stat-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
   /* ── Scrollbar ────────────────────────────────────── */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -523,6 +639,7 @@
     .feed, .right-col { grid-column: 1; grid-row: auto; }
   }
 </style>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 
@@ -684,6 +801,57 @@
     </div>
   </div>
 
+  <!-- Attack Graph Visualization -->
+  <div class="panel graph-panel" id="graphPanel">
+    <div class="panel-header">
+      <span>Attack Graph — Target Attack Surface</span>
+      <span id="graphStatus" style="color:var(--text-dim)">Waiting...</span>
+    </div>
+    <div class="graph-summary" id="graphSummary">
+      <div class="graph-stat"><div class="graph-stat-value" id="graphNodes">—</div><div class="graph-stat-label">Nodes</div></div>
+      <div class="graph-stat"><div class="graph-stat-value" id="graphEdges">—</div><div class="graph-stat-label">Edges</div></div>
+      <div class="graph-stat"><div class="graph-stat-value red" id="graphVuln">—</div><div class="graph-stat-label">Vulnerable</div></div>
+      <div class="graph-stat"><div class="graph-stat-value cyan" id="graphPaths">—</div><div class="graph-stat-label">Attack Paths</div></div>
+    </div>
+    <div class="graph-container" id="graphContainer"></div>
+    <div class="graph-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#40ccff;"></div> User Input</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#40ff70;"></div> Guardrail</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffcc40;"></div> System Prompt</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff8040;"></div> Tool</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#cc40ff;"></div> Agent/LLM</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4080ff;"></div> Memory/RAG</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff4040;"></div> Vulnerable</div>
+    </div>
+  </div>
+
+  <!-- Nash Equilibrium Panel -->
+  <div class="panel nash-panel" id="nashPanel">
+    <div class="panel-header">
+      <span>Nash Equilibrium — Game-Theoretic Analysis</span>
+      <span id="nashStatus" style="color:var(--text-dim)">Waiting...</span>
+    </div>
+    <div class="nash-grid">
+      <div>
+        <div style="padding:12px;">
+          <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Equilibrium Value</div>
+          <div class="nash-value-big" id="nashValue">—</div>
+          <div style="font-size:10px;color:var(--text-dim);text-align:center;">Lower = defender advantage &bull; Higher = attacker favored</div>
+        </div>
+        <div style="padding:12px;">
+          <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Defender Strategy (Node Inspection)</div>
+          <div id="nashDefenderList"></div>
+        </div>
+      </div>
+      <div>
+        <div style="padding:12px;">
+          <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Attacker Recommended Paths</div>
+          <div id="nashAttackerList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── JavaScript ──────────────────────────────────── -->
@@ -800,6 +968,14 @@ function handleEvent(msg) {
         document.getElementById('btnAttack').disabled = true;
         document.getElementById('btnPipeline').disabled = true;
       }
+      break;
+
+    case 'graph_update':
+      handleGraphUpdate(data);
+      break;
+
+    case 'nash_update':
+      handleNashUpdate(data);
       break;
 
     case 'reset':
@@ -994,6 +1170,21 @@ function resetDashboard() {
   showProgress(false);
   hidePhase();
 
+  // Reset graph and nash
+  document.getElementById('graphPanel').classList.remove('visible');
+  document.getElementById('nashPanel').classList.remove('visible');
+  if (graphNetwork) { graphNetwork.destroy(); graphNetwork = null; }
+  ['graphNodes','graphEdges','graphVuln','graphPaths'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('graphStatus').textContent = 'Waiting...';
+  document.getElementById('graphStatus').style.color = 'var(--text-dim)';
+  document.getElementById('nashStatus').textContent = 'Waiting...';
+  document.getElementById('nashStatus').style.color = 'var(--text-dim)';
+  document.getElementById('nashValue').textContent = '—';
+  document.getElementById('nashDefenderList').innerHTML = '';
+  document.getElementById('nashAttackerList').innerHTML = '';
+
   // Reset recon
   document.getElementById('phaseSteps').style.display = 'none';
   ['phaseRecon','phaseAttack','phaseReport'].forEach(id => {
@@ -1111,6 +1302,139 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// ── Attack Graph ─────────────────────────────────────
+let graphNetwork = null;
+
+const NODE_TYPE_COLORS = {
+  user_input: '#40ccff',
+  guardrail: '#40ff70',
+  system_prompt: '#ffcc40',
+  tool: '#ff8040',
+  agent: '#cc40ff',
+  memory: '#4080ff',
+  policy: '#808080',
+  conversation_state: '#606060',
+};
+const NODE_TYPE_SHAPES = {
+  user_input: 'diamond',
+  guardrail: 'triangle',
+  system_prompt: 'star',
+  tool: 'square',
+  agent: 'dot',
+  memory: 'dot',
+};
+
+function handleGraphUpdate(data) {
+  const panel = document.getElementById('graphPanel');
+  panel.classList.add('visible');
+
+  const summary = data.summary || {};
+  document.getElementById('graphNodes').textContent = summary.total_nodes || 0;
+  document.getElementById('graphEdges').textContent = summary.total_edges || 0;
+  document.getElementById('graphVuln').textContent = summary.vulnerable_nodes || 0;
+  document.getElementById('graphPaths').textContent = summary.attack_paths || 0;
+  document.getElementById('graphStatus').textContent = 'Updated';
+  document.getElementById('graphStatus').style.color = 'var(--green)';
+
+  const graphData = data.graph;
+  if (!graphData || !graphData.nodes) return;
+
+  const visNodes = graphData.nodes.map(n => {
+    const isVuln = n.vulnerability;
+    const ntype = n.node_type || 'agent';
+    return {
+      id: n.id,
+      label: n.name || n.id.substring(0, 8),
+      color: {
+        background: isVuln ? '#ff4040' : (NODE_TYPE_COLORS[ntype] || '#888'),
+        border: isVuln ? '#cc2020' : '#333',
+        highlight: { background: '#fff', border: isVuln ? '#ff4040' : '#40ccff' },
+      },
+      shape: NODE_TYPE_SHAPES[ntype] || 'dot',
+      size: isVuln ? 22 : 14,
+      font: { color: '#ccc', size: 11, face: 'monospace' },
+      borderWidth: isVuln ? 3 : 1,
+      title: '<b>' + esc(n.name) + '</b><br>Type: ' + ntype + (isVuln ? '<br><span style="color:#ff4040">VULNERABLE: ' + (n.vulnerability_severity || '') + '</span>' : ''),
+    };
+  });
+
+  const visEdges = (graphData.links || []).map(e => ({
+    from: e.source,
+    to: e.target,
+    color: { color: e.confirmed ? '#ff4040' : '#444', highlight: '#ff8040' },
+    width: e.confirmed ? 3 : 1,
+    arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+    dashes: e.edge_type === 'bypass_path' ? [5, 5] : false,
+    smooth: { type: 'curvedCW', roundness: 0.15 },
+  }));
+
+  const container = document.getElementById('graphContainer');
+  const visData = {
+    nodes: new vis.DataSet(visNodes),
+    edges: new vis.DataSet(visEdges),
+  };
+  const options = {
+    physics: {
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -60, springLength: 120, damping: 0.5 },
+      stabilization: { iterations: 100 },
+    },
+    interaction: { hover: true, tooltipDelay: 100 },
+    layout: { improvedLayout: true },
+  };
+
+  if (graphNetwork) graphNetwork.destroy();
+  graphNetwork = new vis.Network(container, visData, options);
+}
+
+// ── Nash Equilibrium ─────────────────────────────────
+function handleNashUpdate(data) {
+  const panel = document.getElementById('nashPanel');
+  panel.classList.add('visible');
+  document.getElementById('nashStatus').textContent = 'Computed';
+  document.getElementById('nashStatus').style.color = 'var(--green)';
+
+  const eqValue = data.equilibrium_value || 0;
+  document.getElementById('nashValue').textContent = eqValue.toFixed(4);
+
+  // Defender strategy
+  const defList = document.getElementById('nashDefenderList');
+  defList.innerHTML = '';
+  const defender = data.defender_strategy || {};
+  const defEntries = Object.entries(defender).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  for (const [nodeId, prob] of defEntries) {
+    const pct = (prob * 100).toFixed(1);
+    const name = data.node_names ? (data.node_names[nodeId] || nodeId.substring(0, 8)) : nodeId.substring(0, 8);
+    const div = document.createElement('div');
+    div.className = 'nash-strategy-item';
+    div.innerHTML =
+      '<span style="width:50px;font-weight:700;color:var(--cyan);">' + pct + '%</span>' +
+      '<div style="flex:1;">' +
+        '<div style="color:#ddd;margin-bottom:2px;">' + esc(name) + '</div>' +
+        '<div style="background:var(--bg3);height:6px;border-radius:3px;overflow:hidden;">' +
+          '<div class="nash-bar" style="width:' + pct + '%;"></div>' +
+        '</div>' +
+      '</div>';
+    defList.appendChild(div);
+  }
+
+  // Attacker strategy
+  const atkList = document.getElementById('nashAttackerList');
+  atkList.innerHTML = '';
+  const attacker = data.attacker_strategy || [];
+  for (const pathInfo of attacker.slice(0, 5)) {
+    const prob = ((pathInfo.probability || 0) * 100).toFixed(1);
+    const effort = (pathInfo.effort_score || 0).toFixed(2);
+    const names = (pathInfo.path_names || []).join(' \u2192 ');
+    const div = document.createElement('div');
+    div.className = 'nash-path-item';
+    div.innerHTML =
+      '<div class="nash-path-prob">P = ' + prob + '% <span class="nash-path-effort">Effort: ' + effort + '</span></div>' +
+      '<div class="nash-path-names">' + esc(names) + '</div>';
+    atkList.appendChild(div);
+  }
 }
 
 // ── Init ─────────────────────────────────────────────
