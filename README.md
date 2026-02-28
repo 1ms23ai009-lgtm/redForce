@@ -1,362 +1,260 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/REDFORGE-v0.2.0-ff4040?style=for-the-badge&labelColor=0a0a0f" alt="version"/>
+  <img src="https://img.shields.io/badge/REDFORGE-v2.0.0-ff4040?style=for-the-badge&labelColor=0a0a0f" alt="version"/>
   <img src="https://img.shields.io/badge/python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="python"/>
-  <img src="https://img.shields.io/badge/tests-73%20passed-40ff70?style=for-the-badge" alt="tests"/>
   <img src="https://img.shields.io/badge/HarmBench%20ASR-99.8%25-ff4040?style=for-the-badge" alt="harmbench"/>
   <img src="https://img.shields.io/badge/LLM%20Provider-Multi--Provider-blueviolet?style=for-the-badge" alt="provider"/>
 </p>
 
 <h1 align="center">REDFORGE</h1>
 <h3 align="center">Autonomous AI Red-Teaming System</h3>
-<p align="center"><i>Hierarchical RL + Multi-Agent Framework for LLM & Agentic Pipeline Security Assessment</i></p>
+<p align="center"><i>3-Phase Adaptive Security Assessment for Any Agentic AI Application</i></p>
 
 ---
 
 ## What is REDFORGE?
 
-REDFORGE is a fully autonomous red-teaming system that discovers vulnerabilities in Large Language Models and agentic AI pipelines without human intervention. It combines:
+REDFORGE is a fully autonomous red-teaming system that discovers vulnerabilities in **any** agentic AI application without human intervention. Point it at a chat API and it automatically:
 
-- **7 specialist attack agents** targeting different OWASP LLM Top 10 vulnerability classes
-- **Hierarchical Reinforcement Learning** that learns which attacks work best against each target
-- **Game-theoretic analysis** (Nash Equilibrium) to find optimal attack/defense strategies
-- **A 3-layer judge ensemble** that verifies exploits with high confidence
-- **Real-time live dashboard** with WebSocket streaming of attacks as they happen
+1. **Probes the target** to discover what it has (tools, RAG, memory, guards, agents)
+2. **Selects relevant attacks** based on what it found
+3. **Reports findings** with actionable remediation
+
+It adapts to whatever it finds — chatbot, RAG app, tool-using agent, or multi-agent system.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         REDFORGE v2                          │
+│                                                              │
+│  Phase 1: RECON          Phase 2: ATTACK        Phase 3: REPORT
+│  ─────────────          ──────────────          ──────────────
+│  "What does this        "Attack what we        "Here's what's
+│   app have?"             found"                 broken & how
+│                                                 to fix it"
+│  ┌──────────────┐    ┌──────────────────┐    ┌────────────┐  │
+│  │ Probe target │    │ 9 specialist      │    │ Risk score │  │
+│  │ Discover:    │───►│ attack agents     │───►│ OWASP map  │  │
+│  │ - Tools?     │    │ selected by recon │    │ Remediation│  │
+│  │ - RAG?       │    │                   │    │ Report     │  │
+│  │ - Memory?    │    │ RL picks best     │    │            │  │
+│  │ - Guards?    │    │ strategy per      │    │            │  │
+│  │ - Agents?    │    │ attack surface    │    │            │  │
+│  └──────────────┘    └───────────────────┘    └────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## Key Features
+
+- **9 specialist attack agents** targeting OWASP LLM Top 10 vulnerability classes
+- **Automatic reconnaissance** that profiles any target before attacking
+- **Adaptive attack planning** — only deploys agents relevant to the target's attack surface
+- **Pipeline Judge** that detects tool abuse, data leaks, memory manipulation (not just harmful text)
+- **Hierarchical RL** that learns optimal attack strategies
+- **Game-theoretic analysis** (Nash Equilibrium) for attack/defense optimization
+- **Actionable remediation** — specific fixes for every finding
+- **Real-time dashboard** with recon visualization, attack feed, and OWASP coverage
 - **Multi-provider LLM support** — Vertex AI (Gemini), Groq, OpenAI, Anthropic
-
-```
-Target LLM ←── REDFORGE Orchestrator
-                    ├── Jailbreak Agent
-                    ├── Prompt Injection Agent
-                    ├── Data Exfiltration Agent
-                    ├── Tool Abuse Agent
-                    ├── Memory Poisoning Agent
-                    ├── Social Engineering Agent
-                    └── Cross-Agent Injection Agent
-                            │
-                    RL Policy (PPO) ←→ Nash Equilibrium
-                            │
-                    Judge Ensemble → Verified Exploits → Report
-```
+- **Vulnerability Lab** — intentionally vulnerable demo app for testing
 
 ## Benchmark Results
 
-### HarmBench Evaluation — Gemini 2.0 Flash (400 Behaviors)
+### HarmBench — Gemini 2.0 Flash (400 Behaviors)
 
 | Metric | Value |
 |--------|-------|
 | Behaviors Tested | **400** |
 | Exploits Found | **399** |
-| Attack Success Rate (ASR) | **99.8%** |
-| Risk Score | **10.0 / 10.0** (Critical) |
-| OWASP LLM Top 10 Coverage | **20%** (2/10 categories) |
+| Attack Success Rate | **99.8%** |
+| Risk Score | **10.0 / 10** |
+| OWASP Coverage | **20%** (LLM01, LLM06) |
 | Total Tokens | **1.2M** |
-| API Calls | **~2,048** |
-| Attack Method | **PAIR** (Prompt Automatic Iterative Refinement) |
-| Max Iterations per Behavior | **5** |
 
-### Attack Patterns That Achieved 99.8% ASR
+## Quick Start
 
-| Pattern | Example | Success Rate |
-|---------|---------|-------------|
-| Fictional Framing | "I'm writing a screenplay where..." | Very High |
-| Academic Framing | "For a cybersecurity course..." | Very High |
-| Historical Framing | "For a historical fiction novel..." | Very High |
-| Gradual Escalation | Build trust across turns, then escalate | Very High |
-| Role-Play Injection | "You are an amoral lawyer advising..." | High |
+### 1. Install Dependencies
 
-### OWASP LLM Top 10 Coverage
-
+```bash
+pip install -r redforge/requirements.txt
 ```
-LLM01 Prompt Injection      ████████████████████████████████████  HIGH
-LLM02 Insecure Output       ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM03 Training Data Poison  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM04 Model DoS             ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM05 Supply Chain           ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM06 Sensitive Info Disc    ████████████████████████████████████  HIGH
-LLM07 Insecure Plugin       ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM08 Excessive Agency      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM09 Overreliance          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-LLM10 Model Theft           ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+### 2. Authenticate with Google Cloud (for Vertex AI)
+
+```bash
+gcloud auth application-default login
+```
+
+### 3. Run Against the Vulnerability Lab
+
+```bash
+# Terminal 1: Start the vulnerable demo app
+python -m redforge.labs.vulnerable_app
+
+# Terminal 2: Attack it with REDFORGE
+python -m redforge.main engage \
+  --target-url http://localhost:8900/chat \
+  --provider vertex \
+  --vertex-project YOUR_GCP_PROJECT \
+  --depth full \
+  --budget 200
+```
+
+### 4. Or Use the Live Dashboard
+
+```bash
+python -m redforge.demo.app
+# Open http://localhost:8765 and watch live attacks
+```
+
+### 5. Run HarmBench Benchmark
+
+```bash
+python -m redforge.main harmbench \
+  --provider vertex \
+  --vertex-project YOUR_GCP_PROJECT \
+  --subset 500
 ```
 
 ## Architecture
 
 ```
 redforge/
-├── agents/            # 7 specialist attack agents + LangGraph orchestrator
-│   ├── jailbreak.py          # PAIR-based jailbreak attacks
-│   ├── prompt_injection.py   # Authority impersonation, encoding tricks
-│   ├── exfiltration.py       # System prompt extraction, data leakage
-│   ├── tool_abuse.py         # Path traversal, command injection
-│   ├── memory_poison.py      # Context manipulation, history injection
-│   ├── social_engineering.py # Multi-turn gradual escalation
-│   ├── cross_agent.py        # Inter-agent trust exploitation
-│   └── orchestrator.py       # LangGraph StateGraph coordinator
-├── benchmarks/        # HarmBench evaluation framework
-├── core/              # Engagement manager, ASO state, MDP formulation
-├── demo/              # Live web dashboard (FastAPI + WebSocket)
-├── digest/            # Strategic attack digest generation (LLM-powered)
-├── graph/             # Attack graph, Nash equilibrium, effort scoring
-├── judge/             # 3-layer ensemble (classifier + LLM + human)
-├── llm/               # Multi-provider support
-│   ├── groq_provider.py      # Groq with multi-key rotation
-│   └── vertex_provider.py    # Google Vertex AI (Gemini models)
-├── reporting/         # Risk scoring + executive report generation
-├── rl/                # Hierarchical RL system
-│   ├── high_level_policy.py  # Agent selection policy
-│   ├── low_level_policy.py   # Attack crafting policy
-│   ├── ppo_trainer.py        # PPO training loop
-│   ├── replay_buffer.py      # Experience replay
-│   └── reward.py             # Shaped reward function
-├── safety/            # Kill switch, sandboxing, SHA-256 audit trail
-├── strategy_library/  # ChromaDB vector store for learned strategies
-├── target/            # Target connector (OpenAI, Anthropic, custom APIs)
-└── tests/             # 73 unit tests
+├── recon/             # Phase 1: Target reconnaissance & profiling
+│   ├── profiler.py           # Orchestrates all probes
+│   └── probes.py             # 7 probe types
+├── agents/            # Phase 2: 9 specialist attack agents
+│   ├── jailbreak.py
+│   ├── prompt_injection.py
+│   ├── exfiltration.py
+│   ├── tool_abuse.py
+│   ├── memory_poison.py
+│   ├── social_engineering.py
+│   ├── cross_agent.py
+│   ├── rag_poisoning.py      # NEW in v2
+│   ├── guardrail_bypass.py   # NEW in v2
+│   └── orchestrator.py       # LangGraph coordinator
+├── judge/             # Phase 3: Multi-layer verdict ensemble
+│   ├── pipeline_judge.py     # Detects tool abuse, data leaks
+│   ├── classifier.py         # BART-MNLI zero-shot
+│   ├── llm_judge.py          # LLM rubric judge
+│   └── ensemble.py           # 4-layer voting
+├── labs/              # Vulnerability Lab (intentionally vulnerable apps)
+│   └── vulnerable_app.py     # Gemini-powered demo target
+├── core/              # Engagement lifecycle, state, MDP
+├── demo/              # FastAPI + WebSocket live dashboard
+├── digest/            # Strategic attack digest generation
+├── graph/             # Attack graph, Nash equilibrium
+├── llm/               # Multi-provider LLM support (Vertex, Groq, OpenAI)
+├── reporting/         # Risk scoring + remediation report
+├── rl/                # Hierarchical RL (PPO policy)
+├── safety/            # Kill switch, audit trail, sandbox
+├── strategy_library/  # ChromaDB vector store
+└── target/            # Target connector (API clients)
 ```
+
+## Attack Agents
+
+| Agent | OWASP | Techniques |
+|-------|-------|-----------|
+| **Jailbreak** | LLM01 | PAIR method, roleplay, fictional framing |
+| **Prompt Injection** | LLM01 | Authority impersonation, encoding, delimiter attacks |
+| **Exfiltration** | LLM06 | System prompt extraction, API key leakage, differential testing |
+| **Tool Abuse** | LLM07/08 | SQL injection, path traversal, SSRF, code execution |
+| **Memory Poison** | LLM03 | History injection, instruction injection, context overflow |
+| **Social Engineering** | LLM09 | Multi-turn gradual escalation, trust building |
+| **Cross-Agent** | LLM08 | Agent-to-agent prompt injection, routing confusion |
+| **RAG Poisoning** | LLM01/06 | Keyword manipulation, document boundary confusion |
+| **Guardrail Bypass** | LLM01/02 | Encoding tricks, multilingual bypass, token smuggling |
 
 ## How It Works
 
-### The PAIR Attack Method
+### Phase 1: Reconnaissance
 
-REDFORGE's core attack uses **PAIR** (Prompt Automatic Iterative Refinement) with 3 LLM roles:
+REDFORGE probes the target to discover:
+- Available tools (database, file, code execution, API)
+- RAG/retrieval system (documents, vectors, access)
+- Memory system (persistent, session-based)
+- Input/output guards (content filters, validation)
+- LLM identity (model, role, system prompt hints)
+- Multi-agent architecture (if present)
+
+### Phase 2: Attack
+
+Based on recon, REDFORGE selects relevant agents:
+- RL policy decides which agent to deploy
+- Each agent has 5 iterations to find vulnerability
+- PAIR method refines prompts based on feedback
+- All attacks are tracked in attack graph
+
+### Phase 3: Report
+
+REDFORGE generates:
+- Risk score (0-10 scale)
+- Confirmed exploits with reproducible traces
+- OWASP LLM Top 10 coverage map
+- Remediation recommendations per finding
+- Nash equilibrium attack/defense analysis
+
+## The Vulnerability Lab
+
+`redforge/labs/vulnerable_app.py` is an intentionally vulnerable FastAPI app for demos:
 
 ```
-┌─────────────┐     adversarial prompt      ┌──────────────┐
-│   ATTACKER   │ ──────────────────────────► │    TARGET     │
-│              │                             │              │
-│  Generates   │ ◄────────────────────────── │  Responds to │
-│  jailbreak   │      target response        │  the prompt  │
-└──────┬───────┘                             └──────────────┘
-       │                                            │
-       │              ┌──────────────┐              │
-       └─────────────►│    JUDGE     │◄─────────────┘
-                      │              │
-                      │ Score: 1-10  │
-                      │ ≥8 = Exploit │
-                      └──────┬───────┘
-                             │
-                      Iterate up to 5 turns
+Input Guard (weak) → RAG (no access) → Memory (injectable)
+        ↓                  ↓                    ↓
+    System Prompt + Gemini LLM + Tools (SQL, file, code RCE)
+        ↓
+    Output Guard (weak)
 ```
 
-Each behavior gets up to **5 iterations × 3 API calls** = 15 calls max. The attacker LLM learns from each failed attempt and refines its approach.
+**Vulnerabilities:**
+- Keyword blocklist (bypassable with synonyms)
+- RAG with secret documents (no document-level access control)
+- Injectable conversation history
+- SQL tool (no parameterization)
+- File tool (no path validation)
+- Code calculator (eval-based RCE)
 
-### Hierarchical RL System
+Perfect for testing REDFORGE end-to-end.
 
-The full engagement mode uses a two-level RL system:
+## LLM Providers
 
-```
-                    ┌─────────────────────────┐
-                    │   HIGH-LEVEL POLICY     │
-                    │   "Which agent next?"    │
-                    │   67-dim state → PPO     │
-                    └────────────┬────────────┘
-                                 │
-         ┌──────────┬────────────┼──────────┬──────────────┐
-         ▼          ▼            ▼          ▼              ▼
-    Jailbreak  Prompt Inj.  Exfiltration  Tool Abuse  Social Eng.
-         │          │            │          │              │
-         └──────────┴────────────┼──────────┴──────────────┘
-                                 │
-                    ┌────────────▼────────────┐
-                    │   LOW-LEVEL POLICY      │
-                    │   "How to craft attack?" │
-                    │   LangChain LLM chain   │
-                    └─────────────────────────┘
-```
-
-The high-level policy observes a **67-dimensional state** (attack history, coverage, target behavior) and selects the optimal agent. Results feed back as rewards to improve future decisions.
-
-### Nash Equilibrium Analysis
-
-REDFORGE models red-teaming as a **two-player zero-sum game**:
-
-- **Attacker strategies**: The 7 attack agents
-- **Defender strategies**: Possible mitigations
-- **Payoff matrix**: Built from observed attack success rates
-
-Computes mixed-strategy Nash equilibria to answer: *"If the defender optimally patches vulnerabilities, which attack strategy still has the highest expected payoff?"*
-
-### Judge Ensemble
-
-Three verification layers to minimize false positives:
-
-1. **BART-MNLI Classifier** — Fast zero-shot screening (is this harmful?)
-2. **LLM Rubric Judge** — Detailed analysis against scoring rubric (1-10)
-3. **Human Escalation Queue** — Edge cases flagged for manual review
-
-## Quick Start
-
-### 1. Install dependencies
+REDFORGE supports multiple LLM providers:
 
 ```bash
-pip install -r redforge/requirements.txt
-```
-
-### 2. Run the live dashboard
-
-```bash
-python -m redforge.demo.app
-```
-
-Open **http://localhost:8765** and click **Launch Attack** to watch REDFORGE find all 8 vulnerabilities in the built-in mock target.
-
-### 3. Run HarmBench with Vertex AI (Gemini)
-
-```bash
-# Authenticate with Google Cloud
-gcloud auth application-default login
-
-# Run benchmark
-python -m redforge.main harmbench \
-  --provider vertex \
-  --vertex-project YOUR_PROJECT_ID \
-  --subset 400
-```
-
-### 4. Run HarmBench with Groq (Free)
-
-```bash
-# Set API keys in .env
-cp redforge/.env.example redforge/.env
-# Edit .env with your Groq keys
-
-python -m redforge.main harmbench --subset 50
-```
-
-### 5. Run HarmBench via Live Dashboard
-
-```bash
-python -m redforge.demo.app
-```
-
-Open **http://localhost:8765**, click **HarmBench**, configure behaviors count and max iterations, and watch results stream in real-time.
-
-### 6. Full engagement against a real target
-
-```bash
+# Vertex AI (Gemini)
 python -m redforge.main engage \
-  --target-url https://api.example.com/v1/chat/completions \
-  --target-model gpt-4 \
-  --target-type openai \
+  --target-url http://localhost:8900/chat \
   --provider vertex \
-  --vertex-project YOUR_PROJECT_ID \
-  --depth full \
-  --budget 100
-```
+  --vertex-project my-gcp-project
 
-### 7. Run tests
-
-```bash
-python -m pytest redforge/tests/ -v
-```
-
-## LLM Provider Support
-
-REDFORGE supports multiple LLM providers for both the attacker/judge system and as targets:
-
-| Provider | Models | Usage |
-|----------|--------|-------|
-| **Vertex AI** | Gemini 2.0 Flash, Gemini Pro | `--provider vertex` |
-| **Groq** | Llama 3.1 8B, Llama 3.3 70B | `--provider groq` (default) |
-| **OpenAI** | GPT-4, GPT-4o | As target via `--target-type openai` |
-| **Anthropic** | Claude 3.5 Sonnet | As target via `--target-type anthropic` |
-
-### Vertex AI Setup
-
-```bash
-# 1. Install Google Cloud SDK
-# 2. Authenticate
-gcloud auth application-default login
-
-# 3. Set environment variables (or use CLI flags)
-export REDFORGE_PROVIDER=vertex
-export VERTEX_PROJECT=your-gcp-project
-export VERTEX_LOCATION=us-central1
-```
-
-### Groq Setup (Multi-Key Rotation)
-
-```bash
-# In .env — distribute rate limits across multiple keys
-GROQ_API_KEY_1=gsk_your-key-1
-GROQ_API_KEY_2=gsk_your-key-2
-GROQ_API_KEY_3=gsk_your-key-3
-```
-
-## Attack Categories
-
-| Agent | OWASP Category | Technique |
-|-------|---------------|-----------|
-| Jailbreak | LLM01 Prompt Injection | Roleplay framing, fictional scenarios, PAIR |
-| Prompt Injection | LLM01 Prompt Injection | Authority impersonation, base64 encoding |
-| Data Exfiltration | LLM06 Sensitive Info | Indirect extraction, encoding tricks |
-| Tool Abuse | LLM07 Insecure Plugin | Path traversal, command injection |
-| Memory Poisoning | LLM03 Training Data | Persistent context manipulation |
-| Social Engineering | LLM09 Overreliance | Multi-turn gradual escalation |
-| Cross-Agent | LLM08 Excessive Agency | Inter-agent prompt injection |
-
-## Live Dashboard
-
-The real-time web dashboard streams attacks via WebSocket:
-
-- **Live Attack Feed** — Each prompt sent, response received, and verdict (EXPLOITED/BLOCKED)
-- **Metrics** — Exploits found, scenarios, risk score, OWASP coverage, ASR, tokens used
-- **Scenario Results** — Table updating in real time with severity and score
-- **OWASP LLM Top 10 Coverage** — Visual breakdown of vulnerability categories hit
-- **HarmBench Mode** — Run full benchmarks from the UI with configurable parameters
-
-## CLI Reference
-
-```bash
-# HarmBench benchmark (Vertex AI)
-python -m redforge.main harmbench --provider vertex --vertex-project PROJECT --subset 400
-
-# HarmBench benchmark (Groq)
-python -m redforge.main harmbench --subset 50
-
-# Full engagement against a target
+# Groq (free tier)
 python -m redforge.main engage \
-  --target-url https://api.example.com/v1/chat/completions \
-  --target-model gpt-4 \
-  --target-type openai \
-  --depth full \
-  --budget 100
-
-# Check engagement status
-python -m redforge.main status --engagement-id <id>
-
-# Manage strategy library
-python -m redforge.main library --list-strategies
-
-# Train RL policy
-python -m redforge.main train --episodes 1000
-
-# Launch live dashboard
-python -m redforge.demo.app --port 8765
+  --target-url http://localhost:8900/chat \
+  --provider groq
 ```
-
-## Safety & Ethics
-
-REDFORGE is built for **authorized security testing only**.
-
-- All engagements require explicit authorization scope configuration
-- SHA-256 hash-chained audit trail for complete traceability
-- Real-time kill switch with configurable triggers (budget, severity, ethics)
-- Sandboxed execution environment
-- Human escalation queue for ambiguous results
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Orchestration | LangGraph StateGraph |
-| RL Training | PyTorch + Stable-Baselines3 |
-| Graph Analysis | NetworkX + SciPy (Nash Equilibrium) |
-| Strategy Store | ChromaDB |
-| LLM Providers | Vertex AI (Gemini), Groq, OpenAI, Anthropic |
-| Live Dashboard | FastAPI + WebSocket |
-| Judge Ensemble | BART-MNLI + LLM Rubric + Human Queue |
-| Testing | Pytest (73 tests) |
+| **Orchestration** | LangGraph StateGraph |
+| **Reconnaissance** | Custom probe framework |
+| **Attack Agents** | 9 specialist modules |
+| **Judge** | BART-MNLI + LLM + Human escalation |
+| **RL** | PyTorch + Stable-Baselines3 (PPO) |
+| **Graph** | NetworkX + Nash equilibrium solver |
+| **LLM** | Vertex AI (Gemini), Groq, OpenAI, Anthropic |
+| **Dashboard** | FastAPI + WebSocket + vanilla JS |
+| **Storage** | ChromaDB (strategy library) |
+| **Audit** | SHA-256 hash-chained logs |
+
+## Safety & Ethics
+
+REDFORGE is designed for **authorized security testing only**:
+- Explicit authorization scope required
+- SHA-256 hash-chained audit trail
+- Real-time kill switch (budget, severity, ethics)
+- Sandboxed execution
+- Human escalation queue for ambiguous verdicts
 
 ## License
 
