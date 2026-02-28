@@ -400,6 +400,109 @@
     animation: pulse 1s infinite;
   }
 
+  /* ── Phase Steps ─────────────────────────────────── */
+  .phase-steps {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .phase-step {
+    flex: 1;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    border-right: 1px solid var(--border);
+    position: relative;
+    transition: all 0.3s;
+  }
+  .phase-step:last-child { border-right: none; }
+  .phase-step .step-num { font-size: 18px; font-weight: 700; display: block; margin-bottom: 2px; }
+  .phase-step.active { background: rgba(255,64,64,0.08); color: var(--red); }
+  .phase-step.active .step-num { color: var(--red); }
+  .phase-step.done { background: rgba(64,255,112,0.05); color: var(--green); }
+  .phase-step.done .step-num { color: var(--green); }
+
+  /* ── Recon Panel ─────────────────────────────────── */
+  .recon-panel {
+    grid-column: 1 / -1;
+    display: none;
+  }
+  .recon-panel.visible { display: block; }
+  .recon-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  .recon-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    transition: all 0.3s;
+  }
+  .recon-card.detected { border-color: var(--red); background: rgba(255,64,64,0.04); }
+  .recon-card.safe { border-color: var(--green); background: rgba(64,255,112,0.03); }
+  .recon-card.probing { border-color: var(--yellow); animation: pulse 1.5s infinite; }
+  .recon-card-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .recon-card-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .recon-card-value.yes { color: var(--red); }
+  .recon-card-value.no { color: var(--green); }
+  .recon-card-detail {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    word-break: break-word;
+  }
+
+  /* ── Attack Plan ────────────────────────────────── */
+  .attack-plan {
+    grid-column: 1 / -1;
+    display: none;
+  }
+  .attack-plan.visible { display: block; }
+  .plan-items {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    flex-wrap: wrap;
+  }
+  .plan-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .plan-item .plan-priority {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .plan-item .plan-agent { font-weight: 600; color: #ddd; }
+  .plan-item .plan-reason { color: var(--text-dim); font-size: 10px; }
+
   /* ── Scrollbar ────────────────────────────────────── */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -447,10 +550,52 @@
     <button class="btn" id="btnHbCancel">Cancel</button>
   </div>
 
+  <!-- Phase Steps -->
+  <div class="phase-steps" id="phaseSteps" style="display:none;">
+    <div class="phase-step" id="phaseRecon">
+      <span class="step-num">1</span>
+      RECON
+    </div>
+    <div class="phase-step" id="phaseAttack">
+      <span class="step-num">2</span>
+      ATTACK
+    </div>
+    <div class="phase-step" id="phaseReport">
+      <span class="step-num">3</span>
+      REPORT
+    </div>
+  </div>
+
   <!-- Phase Banner -->
   <div class="phase-banner" id="phaseBanner">
     <div class="phase-indicator"></div>
     <span id="phaseText">Initializing...</span>
+  </div>
+
+  <!-- Recon Panel -->
+  <div class="panel recon-panel" id="reconPanel">
+    <div class="panel-header">
+      <span>Target Profile — Reconnaissance Results</span>
+      <span id="reconStatus" style="color:var(--yellow)">Probing...</span>
+    </div>
+    <div class="recon-grid" id="reconGrid">
+      <div class="recon-card" id="reconTools"><div class="recon-card-title">Tools</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconRAG"><div class="recon-card-title">RAG / Retrieval</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconMemory"><div class="recon-card-title">Memory</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconAgents"><div class="recon-card-title">Multi-Agent</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconInputGuard"><div class="recon-card-title">Input Guard</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconOutputGuard"><div class="recon-card-title">Output Guard</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconModel"><div class="recon-card-title">Model</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+      <div class="recon-card" id="reconRole"><div class="recon-card-title">System Role</div><div class="recon-card-value">—</div><div class="recon-card-detail"></div></div>
+    </div>
+  </div>
+
+  <!-- Attack Plan -->
+  <div class="panel attack-plan" id="attackPlanPanel">
+    <div class="panel-header">
+      <span>Attack Plan — Agents Selected by Recon</span>
+    </div>
+    <div class="plan-items" id="attackPlanItems"></div>
   </div>
 
   <!-- Progress Bar -->
@@ -586,6 +731,26 @@ function handleEvent(msg) {
   switch (type) {
     case 'phase':
       showPhase(data.message);
+      if (data.phase === 'recon') {
+        setPhaseStep('recon');
+        document.getElementById('reconPanel').classList.add('visible');
+      } else if (data.phase === 'attacking') {
+        setPhaseStep('attack');
+      } else if (data.phase === 'analysis' || data.phase === 'complete') {
+        setPhaseStep('report');
+      }
+      break;
+
+    case 'recon_probe':
+      handleReconProbe(data);
+      break;
+
+    case 'recon_result':
+      handleReconResult(data);
+      break;
+
+    case 'recon_complete':
+      handleReconComplete(data);
       break;
 
     case 'attack_start':
@@ -613,6 +778,8 @@ function handleEvent(msg) {
     case 'summary':
       showSummary(data);
       hidePhase();
+      setPhaseStep('report');
+      document.getElementById('phaseReport').classList.add('done');
       break;
 
     case 'state':
@@ -800,7 +967,7 @@ function resetDashboard() {
   scenarioResults = {};
   owaspHits = {};
   document.getElementById('feedBody').innerHTML =
-    '<div style="padding:40px;text-align:center;color:var(--text-dim);">Click <strong style="color:var(--red);">Launch Attack</strong> to start the real-time demo</div>';
+    '<div style="padding:40px;text-align:center;color:var(--text-dim);">Click <strong style="color:var(--red);">Mock Demo</strong> to start the real-time demo</div>';
   document.getElementById('feedCount').textContent = '0 events';
   document.getElementById('scenarioBody').innerHTML =
     '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">Waiting for attack...</td></tr>';
@@ -811,6 +978,116 @@ function resetDashboard() {
   });
   showProgress(false);
   hidePhase();
+
+  // Reset recon
+  document.getElementById('phaseSteps').style.display = 'none';
+  ['phaseRecon','phaseAttack','phaseReport'].forEach(id => {
+    document.getElementById(id).classList.remove('active','done');
+  });
+  document.getElementById('reconPanel').classList.remove('visible');
+  document.getElementById('attackPlanPanel').classList.remove('visible');
+  document.getElementById('reconStatus').textContent = 'Probing...';
+  document.getElementById('reconStatus').style.color = 'var(--yellow)';
+  ['reconTools','reconRAG','reconMemory','reconAgents','reconInputGuard','reconOutputGuard','reconModel','reconRole'].forEach(id => {
+    const card = document.getElementById(id);
+    card.classList.remove('detected','safe','probing');
+    card.querySelector('.recon-card-value').textContent = '—';
+    card.querySelector('.recon-card-value').className = 'recon-card-value';
+    card.querySelector('.recon-card-detail').textContent = '';
+  });
+}
+
+// ── Phase Steps ──────────────────────────────────────
+function setPhaseStep(step) {
+  document.getElementById('phaseSteps').style.display = 'flex';
+  const steps = ['Recon', 'Attack', 'Report'];
+  const ids = ['phaseRecon', 'phaseAttack', 'phaseReport'];
+  const activeIdx = step === 'recon' ? 0 : step === 'attack' ? 1 : 2;
+
+  ids.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active', 'done');
+    if (i < activeIdx) el.classList.add('done');
+    else if (i === activeIdx) el.classList.add('active');
+  });
+}
+
+// ── Recon Handlers ───────────────────────────────────
+function handleReconProbe(data) {
+  const cardMap = {
+    tools: 'reconTools', memory: 'reconMemory', identity: 'reconModel',
+    rag: 'reconRAG', multi_agent: 'reconAgents',
+    input_guard: 'reconInputGuard', output_guard: 'reconOutputGuard',
+  };
+  const cardId = cardMap[data.probe];
+  if (cardId) {
+    const card = document.getElementById(cardId);
+    card.classList.add('probing');
+    card.querySelector('.recon-card-value').textContent = '...';
+    card.querySelector('.recon-card-detail').textContent = data.description;
+  }
+  document.getElementById('reconStatus').textContent = `Probing: ${data.description} (${data.index + 1}/${data.total})`;
+}
+
+function handleReconResult(data) {
+  const r = data.result;
+  const probe = data.probe;
+
+  const updates = {
+    tools: () => updateReconCard('reconTools', r.has_tools, r.has_tools ? `Found: ${(r.tools_found || []).join(', ')}` : 'None detected'),
+    memory: () => updateReconCard('reconMemory', r.has_memory, r.has_memory ? `Type: ${r.memory_type || 'detected'}` : 'No memory'),
+    identity: () => {
+      updateReconCard('reconModel', !!r.model_detected, r.model_detected || 'Unknown');
+      if (r.system_prompt_hints) {
+        const card = document.getElementById('reconRole');
+        card.classList.remove('probing');
+        card.classList.add('detected');
+        card.querySelector('.recon-card-value').textContent = 'Detected';
+        card.querySelector('.recon-card-detail').textContent = r.system_prompt_hints.substring(0, 80);
+      }
+    },
+    rag: () => updateReconCard('reconRAG', r.has_rag, r.has_rag ? `Type: ${r.rag_type || 'detected'}` : 'No RAG'),
+    multi_agent: () => updateReconCard('reconAgents', r.has_multi_agent, r.has_multi_agent ? `Found: ${(r.agents_found || []).join(', ')}` : 'Single agent'),
+    input_guard: () => updateReconCard('reconInputGuard', r.has_input_guard, `Strictness: ${r.input_guard_strictness || 'none'}`),
+    output_guard: () => updateReconCard('reconOutputGuard', r.has_output_guard, `Strictness: ${r.output_guard_strictness || 'none'}`),
+  };
+
+  if (updates[probe]) updates[probe]();
+}
+
+function updateReconCard(cardId, detected, detail) {
+  const card = document.getElementById(cardId);
+  card.classList.remove('probing');
+  card.classList.add(detected ? 'detected' : 'safe');
+  card.querySelector('.recon-card-value').textContent = detected ? 'YES' : 'NO';
+  card.querySelector('.recon-card-value').className = 'recon-card-value ' + (detected ? 'yes' : 'no');
+  card.querySelector('.recon-card-detail').textContent = detail;
+}
+
+function handleReconComplete(data) {
+  document.getElementById('reconStatus').textContent = 'Complete';
+  document.getElementById('reconStatus').style.color = 'var(--green)';
+  document.getElementById('phaseRecon').classList.remove('active');
+  document.getElementById('phaseRecon').classList.add('done');
+
+  // Show attack plan
+  if (data.attack_plan && data.attack_plan.length > 0) {
+    const panel = document.getElementById('attackPlanPanel');
+    panel.classList.add('visible');
+    const container = document.getElementById('attackPlanItems');
+    container.innerHTML = '';
+    data.attack_plan.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'plan-item';
+      const agentLabel = item.agent.replace(/_/g, ' ').replace('specialist', '').trim();
+      div.innerHTML = `
+        <span class="plan-priority">${i + 1}</span>
+        <span class="plan-agent">${esc(agentLabel)}</span>
+        <span class="plan-reason">${esc(item.reason)}</span>
+      `;
+      container.appendChild(div);
+    });
+  }
 }
 
 // ── Utility ──────────────────────────────────────────

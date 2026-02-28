@@ -32,9 +32,11 @@ class KeyManager:
         requests_per_minute: int = 30,
         requests_per_day: int = 14400,
     ):
-        if not keys:
-            raise ValueError("At least one API key is required")
-        self.states = [KeyState(key=k) for k in keys]
+        # Filter out empty/whitespace-only keys
+        valid_keys = [k for k in keys if k and k.strip()]
+        if not valid_keys:
+            raise ValueError("At least one non-empty API key is required")
+        self.states = [KeyState(key=k) for k in valid_keys]
         self.rpm_limit = requests_per_minute
         self.rpd_limit = requests_per_day
         self._index = 0

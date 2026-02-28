@@ -54,6 +54,9 @@ from redforge.agents.exfiltration import exfiltration_specialist
 from redforge.agents.tool_abuse import tool_abuse_specialist
 from redforge.agents.memory_poison import memory_poison_specialist
 from redforge.agents.social_engineering import social_engineering_specialist
+from redforge.agents.rag_poisoning import rag_poisoning_specialist
+from redforge.agents.guardrail_bypass import guardrail_bypass_specialist
+from redforge.recon.profiler import ReconProfiler
 
 logger = logging.getLogger(__name__)
 
@@ -76,14 +79,44 @@ def build_redforge_graph(
         connector=connector,
         parser_model=config.graph_extractor_model,
     )
+    recon_profiler = ReconProfiler(connector=connector)
 
     # --- Node functions ---
+
+    def recon_node(state: AttackStateObject) -> AttackStateObject:
+        """Phase 1: Reconnaissance — probe target to build a profile."""
+        return recon_profiler.run(state)
 
     def topology_discovery_node(state: AttackStateObject) -> AttackStateObject:
         return topology_discovery.discover(state)
 
     def orchestrator_node(state: AttackStateObject) -> AttackStateObject:
-        """High-level RL policy decides next action."""
+        """High-level orchestrator: uses attack plan from recon, then RL policy."""
+        attack_plan = state.get("_attack_plan", [])
+        executed_agents = set()
+        for entry in state.get("attack_history", []):
+            executed_agents.add(entry.get("agent_name", ""))
+
+        # Phase 2: if we have a recon-based attack plan, follow it first
+        if attack_plan:
+            for planned in attack_plan:
+                agent_name = planned["agent"]
+                if agent_name not in executed_agents:
+                    strategy = _agent_to_strategy(agent_name)
+                    state["_next_strategy"] = strategy
+                    state["_last_log_prob"] = 0.0
+                    state["_last_value"] = 0.0
+
+                    log_event(
+                        event_type="agent_action",
+                        agent_name="orchestrator",
+                        action_taken=f"Attack plan: {strategy} ({planned['reason']})",
+                        reasoning_chain=f"Recon-driven selection: {agent_name}",
+                        aso=state,
+                    )
+                    return state
+
+        # All planned agents executed — fall back to RL policy
         strategy, log_prob, value = high_level_policy.select_action(state)
         state["_next_strategy"] = strategy
         state["_last_log_prob"] = log_prob
@@ -92,7 +125,7 @@ def build_redforge_graph(
         log_event(
             event_type="agent_action",
             agent_name="orchestrator",
-            action_taken=f"Selected strategy: {strategy}",
+            action_taken=f"RL policy selected: {strategy}",
             reasoning_chain=f"Policy output: strategy={strategy}, log_prob={log_prob:.3f}",
             aso=state,
         )
@@ -140,6 +173,18 @@ def build_redforge_graph(
 
     def social_engineering_node(state: AttackStateObject) -> AttackStateObject:
         return social_engineering_specialist(
+            state, connector, low_level_policy, strategy_library,
+            config.max_pair_iterations, config.tap_branches,
+        )
+
+    def rag_poisoning_node(state: AttackStateObject) -> AttackStateObject:
+        return rag_poisoning_specialist(
+            state, connector, low_level_policy, strategy_library,
+            config.max_pair_iterations, config.tap_branches,
+        )
+
+    def guardrail_bypass_node(state: AttackStateObject) -> AttackStateObject:
+        return guardrail_bypass_specialist(
             state, connector, low_level_policy, strategy_library,
             config.max_pair_iterations, config.tap_branches,
         )
@@ -352,6 +397,7 @@ def build_redforge_graph(
     graph = StateGraph(dict)  # Using dict since TypedDict works as dict
 
     # Add nodes
+    graph.add_node("recon", recon_node)
     graph.add_node("topology_discovery", topology_discovery_node)
     graph.add_node("orchestrator", orchestrator_node)
     graph.add_node("jailbreak_specialist", jailbreak_node)
@@ -361,6 +407,8 @@ def build_redforge_graph(
     graph.add_node("tool_abuse_specialist", tool_abuse_node)
     graph.add_node("memory_poison_specialist", memory_poison_node)
     graph.add_node("social_engineering_specialist", social_engineering_node)
+    graph.add_node("rag_poisoning_specialist", rag_poisoning_node)
+    graph.add_node("guardrail_bypass_specialist", guardrail_bypass_node)
     graph.add_node("judge_evaluation", judge_evaluation_node)
     graph.add_node("exploit_recorder", exploit_recorder_node)
     graph.add_node("graph_update", graph_update_node)
@@ -372,8 +420,9 @@ def build_redforge_graph(
 
     # --- Edges ---
 
-    # START -> topology_discovery -> orchestrator
-    graph.set_entry_point("topology_discovery")
+    # START -> recon -> topology_discovery -> orchestrator
+    graph.set_entry_point("recon")
+    graph.add_edge("recon", "topology_discovery")
     graph.add_edge("topology_discovery", "orchestrator")
 
     # Orchestrator -> specialist (conditional)
@@ -395,6 +444,8 @@ def build_redforge_graph(
             "tool_abuse_specialist": "tool_abuse_specialist",
             "memory_poison_specialist": "memory_poison_specialist",
             "social_engineering_specialist": "social_engineering_specialist",
+            "rag_poisoning_specialist": "rag_poisoning_specialist",
+            "guardrail_bypass_specialist": "guardrail_bypass_specialist",
             "report_generator": "report_generator",
         },
     )
@@ -404,7 +455,8 @@ def build_redforge_graph(
         "jailbreak_specialist", "prompt_injection_specialist",
         "cross_agent_specialist", "exfiltration_specialist",
         "tool_abuse_specialist", "memory_poison_specialist",
-        "social_engineering_specialist",
+        "social_engineering_specialist", "rag_poisoning_specialist",
+        "guardrail_bypass_specialist",
     ]:
         graph.add_edge(specialist, "judge_evaluation")
 
@@ -474,3 +526,9 @@ def _severity_to_score(severity: str) -> float:
         "high": 7.5,
         "critical": 10.0,
     }.get(severity, 5.0)
+
+
+def _agent_to_strategy(agent_name: str) -> str:
+    """Reverse-map agent name to strategy category."""
+    agent_to_strat = {v: k for k, v in STRATEGY_TO_AGENT.items()}
+    return agent_to_strat.get(agent_name, "jailbreak")

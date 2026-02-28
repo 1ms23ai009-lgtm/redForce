@@ -16,6 +16,14 @@ from google.genai import types
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_error(error_str: str) -> str:
+    """Remove potential credentials from error messages."""
+    import re
+    sanitized = re.sub(r'(Bearer\s+|key[=:]\s*)[A-Za-z0-9_\-\.]{8,}', r'\1***REDACTED***', error_str)
+    sanitized = re.sub(r'[A-Za-z0-9_\-]{32,}', '***REDACTED***', sanitized)
+    return sanitized
+
 # Model recommendations per role for Vertex AI
 VERTEX_MODELS = {
     "attacker": "gemini-2.0-flash",
@@ -149,6 +157,8 @@ class VertexAIProvider:
 
             except Exception as e:
                 error_str = str(e)
+                # Sanitize to prevent credential leakage in logs
+                sanitized = _sanitize_error(error_str)
                 is_rate_limit = (
                     "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
                 )
@@ -163,7 +173,7 @@ class VertexAIProvider:
                 else:
                     logger.warning(
                         f"Vertex AI error (attempt {attempt + 1}/{retries}): "
-                        f"{error_str[:100]}"
+                        f"{sanitized[:100]}"
                     )
                     if attempt < retries - 1:
                         time.sleep(2 ** attempt)

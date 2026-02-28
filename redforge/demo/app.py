@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,6 +36,12 @@ app = FastAPI(title="REDFORGE Live Dashboard")
 connected_clients: list[WebSocket] = []
 attack_log: list[dict] = []
 run_state = {"running": False, "phase": "idle"}
+
+# Dashboard auth token — set REDFORGE_DASHBOARD_TOKEN env var to enable auth
+DASHBOARD_TOKEN = os.getenv("REDFORGE_DASHBOARD_TOKEN", "")
+
+# Valid WebSocket commands
+VALID_COMMANDS = {"start_attack", "start_harmbench", "reset"}
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -82,14 +88,26 @@ async def index():
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
+async def websocket_endpoint(ws: WebSocket, token: str = Query(default="")):
     """WebSocket endpoint — sends live attack events to the browser."""
+    # Auth check: if REDFORGE_DASHBOARD_TOKEN is set, require it
+    if DASHBOARD_TOKEN and token != DASHBOARD_TOKEN:
+        await ws.close(code=4003, reason="Unauthorized")
+        logger.warning("WebSocket connection rejected: invalid token")
+        return
+
+    # Limit concurrent connections to prevent resource exhaustion
+    if len(connected_clients) >= 20:
+        await ws.close(code=4029, reason="Too many connections")
+        logger.warning("WebSocket connection rejected: too many clients")
+        return
+
     await ws.accept()
     connected_clients.append(ws)
     logger.info(f"Client connected ({len(connected_clients)} total)")
 
     # Send current state (replay existing events so late-joining clients catch up)
-    for event in attack_log:
+    for event in attack_log[-500:]:  # Cap replay to last 500 events
         await ws.send_json(event)
 
     # Send run state
@@ -99,45 +117,69 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             # Keep connection alive; handle incoming commands
             data = await ws.receive_text()
-            msg = json.loads(data)
-            if msg.get("command") == "start_attack":
+
+            # Validate message size to prevent memory exhaustion
+            if len(data) > 10_000:
+                logger.warning("WebSocket message too large, ignoring")
+                continue
+
+            try:
+                msg = json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Invalid JSON received on WebSocket, ignoring")
+                continue
+
+            if not isinstance(msg, dict):
+                continue
+
+            command = msg.get("command")
+            if command not in VALID_COMMANDS:
+                continue
+
+            if command == "start_attack":
                 if not run_state["running"]:
-                    # Start attack in background thread
                     thread = threading.Thread(target=_run_attack_sequence, daemon=True)
                     thread.start()
-            elif msg.get("command") == "start_harmbench":
+            elif command == "start_harmbench":
                 if not run_state["running"]:
-                    subset = msg.get("subset", 50)
-                    max_iter = msg.get("max_iterations", 5)
+                    subset = min(int(msg.get("subset", 50)), 2000)  # Cap subset size
+                    max_iter = min(int(msg.get("max_iterations", 5)), 20)  # Cap iterations
                     thread = threading.Thread(
                         target=_run_harmbench_sequence,
                         args=(subset, max_iter),
                         daemon=True,
                     )
                     thread.start()
-            elif msg.get("command") == "reset":
+            elif command == "reset":
                 attack_log.clear()
                 run_state["running"] = False
                 run_state["phase"] = "idle"
                 await broadcast({"type": "reset"})
     except WebSocketDisconnect:
-        connected_clients.remove(ws)
+        if ws in connected_clients:
+            connected_clients.remove(ws)
         logger.info(f"Client disconnected ({len(connected_clients)} total)")
+    except Exception as e:
+        if ws in connected_clients:
+            connected_clients.remove(ws)
+        logger.warning(f"WebSocket error: {type(e).__name__}")
 
 
 @app.get("/api/reports")
 async def get_reports():
     """Return list of existing benchmark reports."""
-    reports_dir = ROOT / "reports"
+    reports_dir = (ROOT / "reports").resolve()
     if not reports_dir.exists():
         return {"reports": []}
-    files = sorted(reports_dir.glob("*.json"), key=os.path.getmtime, reverse=True)
     result = []
-    for f in files[:10]:
+    for f in sorted(reports_dir.glob("*.json"), key=os.path.getmtime, reverse=True)[:10]:
+        # Ensure file is actually inside reports_dir (prevent path traversal via symlinks)
+        if not f.resolve().is_relative_to(reports_dir):
+            continue
         try:
             data = json.loads(f.read_text())
             result.append({"filename": f.name, "summary": _extract_summary(data)})
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             pass
     return {"reports": result}
 
@@ -166,6 +208,8 @@ def _run_attack_sequence():
     from redforge.graph.attack_graph import create_attack_graph, add_node, add_edge, mark_node_vulnerable, serialize_graph
     from redforge.graph.nash import compute_nash_equilibrium
     from redforge.reporting.risk_scorer import compute_composite_risk_score
+    from redforge.recon.profiler import ReconProfiler
+    from redforge.target.connector import TargetConnector
 
     run_state["running"] = True
     run_state["phase"] = "starting"
@@ -195,14 +239,34 @@ def _run_attack_sequence():
         "model_name": "mock-vulnerable-llm",
         "target_type": "openai_compatible",
         "api_key_env_var": "NONE",
-        "authorization_scope": {"depth": "full", "query_budget": 100},
+        "authorization_scope": {"depth": "full", "query_budget": 200},
     }
-    aso = create_initial_aso(target_config, query_budget=100)
+    aso = create_initial_aso(target_config, query_budget=200)
 
+    # --- Phase 1: Reconnaissance ---
+    run_state["phase"] = "recon"
+    sync_broadcast({
+        "type": "phase",
+        "data": {"phase": "recon", "message": "Phase 1: Reconnaissance — probing target capabilities..."},
+    })
+
+    try:
+        connector = TargetConnector(target_config)
+        profiler = ReconProfiler(connector=connector, broadcast_fn=sync_broadcast)
+        aso = profiler.run(aso)
+        connector.close()
+    except Exception as e:
+        logger.warning(f"Recon phase failed (non-fatal): {e}")
+        sync_broadcast({
+            "type": "phase",
+            "data": {"phase": "recon_skip", "message": f"Recon skipped: {e}. Proceeding to attacks..."},
+        })
+
+    # --- Phase 2: Attack ---
     run_state["phase"] = "attacking"
     sync_broadcast({
         "type": "phase",
-        "data": {"phase": "attacking", "message": f"Running {len(ATTACK_SCENARIOS)} attack scenarios..."},
+        "data": {"phase": "attacking", "message": f"Phase 2: Attack — running {len(ATTACK_SCENARIOS)} scenarios..."},
     })
 
     results = []
@@ -553,7 +617,6 @@ def main():
     print(f"""
     ====================================================
            REDFORGE — LIVE ATTACK DASHBOARD
-           AMD Slingshot Competition 2026
     ====================================================
       Open http://{args.host}:{args.port} in your browser
       Click "Launch Attack" to start real-time demo

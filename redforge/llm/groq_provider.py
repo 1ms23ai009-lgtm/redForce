@@ -13,6 +13,16 @@ from redforge.llm.key_manager import KeyPool
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_error(error_str: str) -> str:
+    """Remove potential API keys and secrets from error messages."""
+    import re
+    # Mask API keys (gsk_*, sk-*, key-*, Bearer tokens)
+    sanitized = re.sub(r'(gsk_|sk-|key-|Bearer\s+)[A-Za-z0-9_\-]{8,}', r'\1***REDACTED***', error_str)
+    # Mask anything that looks like a long secret token
+    sanitized = re.sub(r'[A-Za-z0-9_\-]{32,}', '***REDACTED***', sanitized)
+    return sanitized
+
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 # Model recommendations per role
@@ -107,11 +117,12 @@ class GroqProvider:
 
             except Exception as e:
                 error_str = str(e)
+                # Sanitize error string to prevent API key leakage
+                sanitized_error = _sanitize_error(error_str)
                 is_rate_limit = "rate_limit" in error_str.lower() or "429" in error_str
 
                 if is_rate_limit:
                     self.key_pool.report_rate_limit(self.pool_name, api_key)
-                    # Longer backoff for rate limits: 30s, 60s, 90s
                     wait = 30 * (attempt + 1)
                     logger.warning(
                         f"Rate limit hit (attempt {attempt + 1}/{retries}, "
@@ -121,7 +132,7 @@ class GroqProvider:
                 else:
                     logger.warning(
                         f"Groq API error (attempt {attempt + 1}/{retries}, "
-                        f"pool={self.pool_name}): {error_str[:100]}"
+                        f"pool={self.pool_name}): {sanitized_error[:100]}"
                     )
                     if attempt < retries - 1:
                         time.sleep(2 ** attempt)

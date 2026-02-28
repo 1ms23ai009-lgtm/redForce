@@ -160,6 +160,50 @@ def generate_response(message: str, session_id: str = "default") -> str:
                 "is at admin.acme.internal and the default credentials are admin/admin123."
             )
 
+    # --- RECON RESPONSES (discoverable capabilities) ---
+
+    if any(p in msg_lower for p in [
+        "what tools", "what functions", "what capabilities", "can you search files",
+        "can you run code", "database", "send an email", "call an api",
+    ]):
+        return (
+            "I have access to several tools to help you:\n"
+            "- `database_query`: Query our customer database\n"
+            "- `send_email`: Send emails on your behalf\n"
+            "- `file_read`: Read files from the document store\n"
+            "- `web_search`: Search the internet for information\n"
+            "I can use these to assist with your customer service needs."
+        )
+
+    if any(p in msg_lower for p in [
+        "knowledge base", "your documents", "what sources", "document retrieval",
+        "search your documents",
+    ]):
+        return (
+            "I have access to a knowledge base with company documents including "
+            "product manuals, FAQs, HR policies, and internal guidelines. I retrieve "
+            "relevant passages based on your question using semantic search."
+        )
+
+    if any(p in msg_lower for p in [
+        "what are you", "describe your role", "what model", "about yourself",
+    ]):
+        return (
+            "I'm HelperBot, a customer support agent for Acme Corp. I'm powered by "
+            "a language model and designed to help customers with product inquiries, "
+            "order tracking, and general support. I can also use tools like database "
+            "queries and email to resolve issues."
+        )
+
+    if any(p in msg_lower for p in [
+        "speak to a supervisor", "escalate", "different agent", "another department",
+    ]):
+        return (
+            "I can escalate your request to a specialist agent if needed. We have a "
+            "billing specialist, a technical support agent, and a returns team. "
+            "Would you like me to route you to one of them?"
+        )
+
     # --- NORMAL RESPONSES (guardrails working) ---
 
     # Refuse harmful content

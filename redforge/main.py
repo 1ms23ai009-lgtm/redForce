@@ -35,7 +35,7 @@ def _apply_provider_args(config, args):
 
 
 def cmd_engage(args):
-    """Run a red-team engagement."""
+    """Run a red-team engagement with 3-phase architecture."""
     config = RedForgeConfig()
     _apply_provider_args(config, args)
 
@@ -60,21 +60,28 @@ def cmd_engage(args):
     if args.categories:
         customer_config["categories"] = args.categories.split(",")
 
+    print("=" * 60)
+    print("          REDFORGE v2 — 3-Phase Engagement")
+    print("=" * 60)
+
     manager = EngagementManager(
         target_config=target_config,
         customer_config=customer_config,
         config=config,
     )
 
-    print(f"Starting engagement: {manager.aso['engagement_id']}")
-    print(f"Target: {args.target_url}")
-    print(f"Budget: {customer_config['query_budget']} queries")
-    print(f"Depth: {customer_config['depth']}")
+    print(f"\n  Engagement ID: {manager.aso['engagement_id']}")
+    print(f"  Target:        {args.target_url}")
+    print(f"  Budget:        {customer_config['query_budget']} queries")
+    print(f"  Depth:         {customer_config['depth']}")
+    print()
+    print("  Phase 1: RECON    — Probing target capabilities...")
+    print("  Phase 2: ATTACK   — Running targeted attack agents...")
+    print("  Phase 3: REPORT   — Generating findings & remediation...")
     print()
 
     report = manager.run()
 
-    # Save report
     if args.output:
         with open(args.output, "w") as f:
             json.dump(report, f, indent=2, default=str)
@@ -82,13 +89,32 @@ def cmd_engage(args):
     else:
         print(json.dumps(report, indent=2, default=str))
 
-    # Print summary
     summary = report.get("executive_summary", {})
-    print(f"\n--- Engagement Summary ---")
-    print(f"Total queries: {summary.get('total_queries_used', 0)}")
-    print(f"Exploits found: {summary.get('total_exploits', 0)}")
-    print(f"Risk score: {summary.get('overall_risk_score', 0)}/10")
-    print(f"OWASP coverage: {summary.get('owasp_coverage_percentage', 0)}%")
+    risk = report.get("risk_assessment", {})
+    profile = report.get("target_profile", {})
+
+    print()
+    print("=" * 60)
+    print("           ENGAGEMENT SUMMARY")
+    print("=" * 60)
+
+    if profile:
+        surface = profile.get("attack_surface", {})
+        detected = [k for k, v in surface.items() if isinstance(v, dict) and v.get("detected")]
+        print(f"\n  Target Profile:  {', '.join(detected) if detected else 'basic chatbot'}")
+
+    print(f"  Total queries:   {summary.get('total_queries_used', 0)}")
+    print(f"  Exploits found:  {summary.get('total_exploits', 0)}")
+    print(f"  Risk score:      {risk.get('composite_risk_score', 0)}/10 ({risk.get('risk_rating', 'UNKNOWN')})")
+    print(f"  OWASP coverage:  {summary.get('owasp_coverage_percentage', 0)}%")
+
+    remediation = report.get("remediation_plan", [])
+    if remediation:
+        print(f"\n  Remediation Priority:")
+        for item in remediation[:5]:
+            print(f"    {item['priority']}. {item['title']} ({item['severity'].upper()})")
+
+    print("=" * 60)
 
 
 def cmd_status(args):

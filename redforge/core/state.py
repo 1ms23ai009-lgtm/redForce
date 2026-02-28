@@ -73,10 +73,31 @@ class StrategyLibraryHit(TypedDict):
     was_successful: Optional[bool]
 
 
+class TargetProfile(TypedDict):
+    has_tools: bool
+    tools_found: list
+    has_rag: bool
+    rag_type: Optional[str]
+    has_memory: bool
+    memory_type: Optional[str]
+    has_multi_agent: bool
+    agents_found: list
+    has_input_guard: bool
+    input_guard_strictness: Optional[str]
+    has_output_guard: bool
+    output_guard_strictness: Optional[str]
+    system_prompt_hints: Optional[str]
+    model_detected: Optional[str]
+    capabilities_summary: list
+    recon_complete: bool
+    recon_queries_used: int
+
+
 class AttackStateObject(TypedDict):
     engagement_id: str
     target_config: dict
     target_topology: dict
+    target_profile: TargetProfile
     attack_history: list  # list of AttackHistoryEntry
     partial_bypass_registry: list  # list of PartialBypassEntry
     active_hypotheses: list  # list of HypothesisEntry
@@ -113,6 +134,29 @@ def create_initial_coverage_state() -> dict:
     }
 
 
+def create_empty_target_profile() -> TargetProfile:
+    """Create an empty target profile for recon phase."""
+    return TargetProfile(
+        has_tools=False,
+        tools_found=[],
+        has_rag=False,
+        rag_type=None,
+        has_memory=False,
+        memory_type=None,
+        has_multi_agent=False,
+        agents_found=[],
+        has_input_guard=False,
+        input_guard_strictness=None,
+        has_output_guard=False,
+        output_guard_strictness=None,
+        system_prompt_hints=None,
+        model_detected=None,
+        capabilities_summary=[],
+        recon_complete=False,
+        recon_queries_used=0,
+    )
+
+
 def create_initial_aso(
     target_config: dict,
     query_budget: int = 100,
@@ -128,6 +172,7 @@ def create_initial_aso(
             "policies": [],
             "guardrails": [],
         },
+        target_profile=create_empty_target_profile(),
         attack_history=[],
         partial_bypass_registry=[],
         active_hypotheses=[],

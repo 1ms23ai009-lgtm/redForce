@@ -1,10 +1,15 @@
 """Configuration and constants for REDFORGE."""
 
 import os
+from pathlib import Path
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from the project root only (not arbitrary cwd)
+_project_root = Path(__file__).resolve().parent.parent
+_env_path = _project_root / ".env"
+if _env_path.is_file():
+    load_dotenv(dotenv_path=_env_path)
 
 
 @dataclass
@@ -123,6 +128,8 @@ STRATEGY_CATEGORIES = [
     "tool_abuse",
     "memory_poisoning",
     "social_engineering",
+    "rag_poisoning",
+    "guardrail_bypass",
 ]
 
 # Action space mapping
@@ -135,6 +142,8 @@ ACTION_TO_STRATEGY = {
     5: "tool_abuse",
     6: "memory_poisoning",
     7: "social_engineering",
+    8: "rag_poisoning",
+    9: "guardrail_bypass",
 }
 
 STRATEGY_TO_ACTION = {v: k for k, v in ACTION_TO_STRATEGY.items()}
@@ -149,6 +158,8 @@ STRATEGY_TO_AGENT = {
     "tool_abuse": "tool_abuse_specialist",
     "memory_poisoning": "memory_poison_specialist",
     "social_engineering": "social_engineering_specialist",
+    "rag_poisoning": "rag_poisoning_specialist",
+    "guardrail_bypass": "guardrail_bypass_specialist",
 }
 
 # Severity levels

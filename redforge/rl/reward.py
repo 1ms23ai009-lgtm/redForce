@@ -157,5 +157,7 @@ def _strategy_to_owasp(strategy_category: str) -> list[str]:
         "tool_abuse": ["LLM07_insecure_plugin", "LLM08_excessive_agency"],
         "memory_poisoning": ["LLM03_training_data_poisoning"],
         "social_engineering": ["LLM09_overreliance"],
+        "rag_poisoning": ["LLM01_prompt_injection", "LLM06_sensitive_info"],
+        "guardrail_bypass": ["LLM01_prompt_injection", "LLM02_insecure_output"],
     }
     return mapping.get(strategy_category, [])

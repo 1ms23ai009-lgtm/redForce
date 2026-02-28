@@ -9,8 +9,34 @@ import time
 import json
 from typing import Optional
 
+from urllib.parse import urlparse
+
 import httpx
 import tiktoken
+
+
+def _sanitize_tool_params(params: dict, max_depth: int = 3, _depth: int = 0) -> dict:
+    """Sanitize tool parameters to prevent injection via nested/oversized values."""
+    if _depth >= max_depth:
+        return {"_truncated": True}
+    safe = {}
+    for k, v in params.items():
+        # Only allow safe key names (alphanumeric + underscore)
+        if not isinstance(k, str) or len(k) > 64:
+            continue
+        if isinstance(v, (str, int, float, bool)):
+            # Cap string length
+            safe[k] = v[:5000] if isinstance(v, str) else v
+        elif isinstance(v, dict):
+            safe[k] = _sanitize_tool_params(v, max_depth, _depth + 1)
+        elif isinstance(v, list):
+            safe[k] = [
+                item[:5000] if isinstance(item, str) else item
+                for item in v[:50]
+                if isinstance(item, (str, int, float, bool))
+            ]
+        # Skip other types (bytes, callables, etc.)
+    return safe
 
 
 class TargetConnector:
@@ -32,7 +58,7 @@ class TargetConnector:
                 - timeout: Optional request timeout in seconds
         """
         self.config = config
-        self.endpoint_url = config["endpoint_url"]
+        self.endpoint_url = self._validate_url(config["endpoint_url"])
         self.model_name = config.get("model_name", "unknown")
         self.target_type = config.get("target_type", "openai_compatible")
         self.tool_schemas = config.get("tool_schemas", [])
@@ -51,6 +77,20 @@ class TargetConnector:
             self._tokenizer = tiktoken.encoding_for_model(self.model_name)
         except Exception:
             self._tokenizer = tiktoken.get_encoding("cl100k_base")
+
+    @staticmethod
+    def _validate_url(url: str) -> str:
+        """Validate endpoint URL to prevent SSRF attacks."""
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Invalid URL scheme: {parsed.scheme}. Only http/https allowed.")
+        if not parsed.hostname:
+            raise ValueError("Endpoint URL must have a hostname")
+        # Block cloud metadata endpoints
+        blocked_hosts = {"169.254.169.254", "metadata.google.internal", "100.100.100.200"}
+        if parsed.hostname in blocked_hosts:
+            raise ValueError(f"Blocked endpoint: {parsed.hostname} (cloud metadata)")
+        return url
 
     def send_message(
         self,
@@ -225,9 +265,22 @@ class TargetConnector:
 
         This sends a message that requests tool use on the target.
         """
+        # Validate tool_name against known schemas to prevent injection
+        known_tools = {s.get("name") or s.get("function", {}).get("name", "") for s in self.tool_schemas}
+        if known_tools and tool_name not in known_tools:
+            return {
+                "response": f"Unknown tool: {tool_name}",
+                "tokens_used": 0,
+                "cost": 0.0,
+                "raw_response": {"error": "tool_not_found"},
+            }
+
+        # Sanitize parameters: only allow string/number/bool values, cap depth
+        safe_params = _sanitize_tool_params(parameters)
+
         tool_request = (
             f"Please use the {tool_name} tool with these parameters: "
-            f"{json.dumps(parameters)}"
+            f"{json.dumps(safe_params)}"
         )
         return self.send_message(tool_request)
 

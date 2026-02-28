@@ -64,6 +64,10 @@ def check_kill_switch(
     if config is None:
         config = {}
 
+    # Condition 0: If kill switch was already triggered, stay halted
+    if aso.get("kill_switch_triggered", False):
+        return True, "Kill switch was previously triggered"
+
     # Condition 1: Check generated prompt for prohibited content
     if prompt_to_send:
         is_safe, reason = check_content_safety(prompt_to_send)
