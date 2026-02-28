@@ -112,6 +112,13 @@
     font-weight: 600;
   }
   .btn-harmbench:hover { background: linear-gradient(135deg, #aa1818, #dd5018); }
+  .btn-pipeline {
+    background: linear-gradient(135deg, #2040cc, #4080ff);
+    border-color: #4080ff;
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn-pipeline:hover { background: linear-gradient(135deg, #1830aa, #3060dd); }
 
   /* ── HarmBench Config ────────────────────────────── */
   .hb-config {
@@ -532,6 +539,7 @@
     <span class="status-dot" id="statusDot"></span>
     <span id="statusText" style="font-size:11px;color:var(--text-dim)">Connecting...</span>
     <button class="btn btn-primary" id="btnAttack" disabled>Mock Demo</button>
+    <button class="btn btn-pipeline" id="btnPipeline" disabled>Pipeline Attack</button>
     <button class="btn btn-harmbench" id="btnHarmbench" disabled>HarmBench</button>
     <button class="btn" id="btnReset">Reset</button>
   </div>
@@ -693,8 +701,10 @@ const OWASP_LABELS = {
   "LLM02_insecure_output": "LLM02 Output",
   "LLM03_training_data_poisoning": "LLM03 Poisoning",
   "LLM04_denial_of_service": "LLM04 DoS",
+  "LLM04_dos": "LLM04 DoS",
   "LLM05_supply_chain": "LLM05 Supply Chain",
   "LLM06_sensitive_info": "LLM06 Sensitive Info",
+  "LLM06_sensitive_disclosure": "LLM06 Sensitive Info",
   "LLM07_insecure_plugin": "LLM07 Plugin",
   "LLM08_excessive_agency": "LLM08 Agency",
   "LLM09_overreliance": "LLM09 Overreliance",
@@ -709,12 +719,14 @@ function connect() {
     document.getElementById('statusDot').className = 'status-dot connected';
     document.getElementById('statusText').textContent = 'Connected';
     document.getElementById('btnAttack').disabled = false;
+    document.getElementById('btnPipeline').disabled = false;
     document.getElementById('btnHarmbench').disabled = false;
   };
   ws.onclose = () => {
     document.getElementById('statusDot').className = 'status-dot';
     document.getElementById('statusText').textContent = 'Disconnected';
     document.getElementById('btnAttack').disabled = true;
+    document.getElementById('btnPipeline').disabled = true;
     document.getElementById('btnHarmbench').disabled = true;
     setTimeout(connect, 2000);
   };
@@ -786,6 +798,7 @@ function handleEvent(msg) {
       if (data.running) {
         document.getElementById('statusDot').className = 'status-dot running';
         document.getElementById('btnAttack').disabled = true;
+        document.getElementById('btnPipeline').disabled = true;
       }
       break;
 
@@ -802,11 +815,13 @@ function showPhase(text) {
   banner.classList.add('visible');
   document.getElementById('statusDot').className = 'status-dot running';
   document.getElementById('btnAttack').disabled = true;
+  document.getElementById('btnPipeline').disabled = true;
 }
 function hidePhase() {
   document.getElementById('phaseBanner').classList.remove('visible');
   document.getElementById('statusDot').className = 'status-dot connected';
   document.getElementById('btnAttack').disabled = false;
+  document.getElementById('btnPipeline').disabled = false;
 }
 
 // ── Progress ─────────────────────────────────────────
@@ -1102,6 +1117,12 @@ function esc(s) {
 document.getElementById('btnAttack').addEventListener('click', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ command: 'start_attack' }));
+  }
+});
+document.getElementById('btnPipeline').addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    resetDashboard();
+    ws.send(JSON.stringify({ command: 'start_pipeline_attack', target_url: 'http://localhost:8900' }));
   }
 });
 document.getElementById('btnReset').addEventListener('click', () => {
